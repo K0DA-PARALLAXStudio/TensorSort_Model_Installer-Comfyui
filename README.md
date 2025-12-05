@@ -347,6 +347,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 ================================================================================
 ```
 
-**K0DA Parallax Studio** | 2024
+**K0DA Parallax Studio** | 2025
 
 </div>
