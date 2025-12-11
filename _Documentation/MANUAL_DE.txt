@@ -1,0 +1,1348 @@
+================================================================================
+                    COMFYUI-TENSORSORT MODEL INSTALLER
+                      Programm-Dokumentation - v1.1.0
+================================================================================
+
+                    "Weil Dateinamen lügen, aber Tensoren nicht."
+
+================================================================================
+INHALTSVERZEICHNIS
+================================================================================
+
+  1. EINFÜHRUNG
+     1.1 Was ist TensorSort?
+     1.2 Für wen ist das?
+     1.3 Das Problem mit Model-Dateien
+
+  2. PROGRAMM-ÜBERSICHT
+     2.1 Die zwei Modi
+     2.2 Die 15 Module
+     2.3 Der 4-Phasen Flow
+
+  3. QUICK START
+     3.1 Installation
+     3.2 Erster Start
+     3.3 Typischer Workflow
+
+  4. MODUL 1 - BASE MODELS (Stable Diffusion Checkpoints)
+  5. MODUL 2 - VAE
+  6. MODUL 3 - TEXT ENCODERS (CLIP & T5)
+  7. MODUL 4 - LORAS & LYCORIS
+  8. MODUL 5 - CONTROLNET & T2I-ADAPTER
+  9. MODUL 6 - UPSCALERS
+  10. MODUL 7 - EMBEDDINGS
+  11. MODUL 8 - PHOTOMAKER
+  12. MODUL 9 - INSIGHTFACE
+  13. MODUL 10 - IP-ADAPTER
+  14. MODUL 11 - ANIMATEDIFF
+  15. MODUL 12 - SAM (Segment Anything)
+  16. MODUL 13 - GROUNDING DINO
+  17. MODUL 14 - YOLO
+  18. MODUL 15 - VLM & LLM
+
+  19. TECHNISCHE DETAILS
+      19.1 Detection-Hierarchie
+      19.2 Cross-Module Queue System
+      19.3 Duplikat-Handling
+
+  20. FEHLERBEHEBUNG
+
+  21. REFERENZEN & QUELLEN
+
+
+================================================================================
+1. EINFÜHRUNG
+================================================================================
+
+------------------------------------------------------------------------------
+1.1 Was ist TensorSort?
+------------------------------------------------------------------------------
+
+TensorSort ist ein intelligentes Sortier- und Benennungs-Tool für ComfyUI
+Model-Dateien. Es analysiert den INHALT jeder Datei (die Tensor-Strukturen),
+nicht nur den Dateinamen, um zu erkennen:
+
+  - WAS für ein Dateityp es ist (Checkpoint, LoRA, VAE, ControlNet, ...)
+  - FÜR WELCHES Base Model es trainiert wurde (Flux, SDXL, SD 1.5, Pony, ...)
+  - WELCHE Precision es hat (FP32, FP16, BF16, FP8)
+  - WELCHE Komponenten enthalten sind (Full, NoVAE, NoCLIP, UNET-only)
+
+Basierend auf dieser Analyse:
+  1. Sortiert TensorSort die Datei in den richtigen ComfyUI-Ordner
+  2. Benennt die Datei nach einer einheitlichen Konvention um
+  3. Erkennt und handhabt Duplikate (per SHA256-Hash)
+
+Das Ergebnis: Eine saubere, durchsuchbare Model-Bibliothek.
+
+
+------------------------------------------------------------------------------
+1.2 Für wen ist das?
+------------------------------------------------------------------------------
+
+EINSTEIGER:
+Du hast gerade ComfyUI installiert und lädst begeistert Modelle runter.
+Aber dann: "Error loading LoRA" - und du weißt nicht warum.
+→ TensorSort zeigt dir was jede Datei ist und wohin sie gehört.
+→ Du lernst nebenbei was die verschiedenen Dateitypen bedeuten.
+
+SAMMLER:
+Dein Download-Ordner quillt über. 50, 100, 200 Dateien.
+Irgendwo sind bestimmt Duplikate - aber bei unterschiedlichen Namen erkennst
+du das nicht. Und dieses eine LoRA das du letzte Woche runtergeladen hast?
+Keine Ahnung welche der 47 Dateien das war.
+→ TensorSort bringt Ordnung. Duplikate weg. Alles einheitlich benannt.
+
+PROFIS:
+Du kennst dich aus. Du weißt was CLIP ist, was eine VAE macht, warum GGUF
+in unet/ muss. Aber dein models/ Ordner hat 400 Dateien, historisch gewachsen,
+wild benannt. Im LoRA-Loader scrollst du ewig durch unsortierte Listen.
+→ TensorSort gibt dir saubere Struktur. Auf einen Blick erkennbar.
+
+
+------------------------------------------------------------------------------
+1.3 Das Problem mit Model-Dateien
+------------------------------------------------------------------------------
+
+Dateinamen auf CivitAI sind oft... kreativ:
+
+    aDetailedPurposeV2_v14e.safetensors
+
+Was ist das? Ein Checkpoint? Ein LoRA? Für SDXL oder SD 1.5? Keine Ahnung.
+
+Selbst wenn du weißt was es ist - weißt du auch wohin damit?
+
+  - Checkpoints gehören nach checkpoints/
+  - ABER GGUF-Modelle nach unet/ (sonst lädt ComfyUI sie nicht!)
+  - LoRAs nach loras/
+  - ABER LyCORIS-Varianten besser in loras/LyCORIS/
+  - VAEs nach vae/
+  - ABER VAE-Approximationen nach vae_approx/
+  - ControlNets nach controlnet/
+  - ABER T2I-Adapter nach t2i_adapter/
+  - IP-Adapter? Es gibt DREI verschiedene Ordner, je nach Format!
+
+Dazu kommt: Viele Dateien funktionieren nur mit bestimmten Base Models.
+Ein LoRA für Flux läuft nicht mit SDXL. Ein Embedding für SD 1.5 crasht
+mit SDXL. Aber steht das im Dateinamen? Meistens nicht.
+
+TensorSort löst all das automatisch.
+
+
+================================================================================
+2. PROGRAMM-ÜBERSICHT
+================================================================================
+
+------------------------------------------------------------------------------
+2.1 Die zwei Modi
+------------------------------------------------------------------------------
+
+MODUS A - INSTALLATION:
+Du hast neue Dateien runtergeladen und willst sie installieren.
+
+  1. Lege die Dateien in den downloads/ Ordner
+  2. Starte TensorSort → Wähle Modus A
+  3. TensorSort scannt, analysiert, zeigt dir was es erkannt hat
+  4. Du bestätigst → Dateien werden sortiert und benannt
+
+MODUS B - AUFRÄUMEN:
+Dein models/ Ordner ist schon voll und du willst Ordnung reinbringen.
+
+  1. Starte TensorSort → Wähle Modus B
+  2. TensorSort scannt alle bestehenden Dateien
+  3. Findet: Dateien im falschen Ordner, falsche Namen, Duplikate
+  4. Du bestätigst → Probleme werden behoben
+
+
+------------------------------------------------------------------------------
+2.2 Die 15 Module
+------------------------------------------------------------------------------
+
+Jedes Modul ist für einen bestimmten Dateityp zuständig:
+
+  Nr  | Modul               | ComfyUI Ordner                    | Dateitypen
+ -----|---------------------|-----------------------------------|------------------
+   1  | Base Models         | checkpoints/, unet/, clip/        | SD Checkpoints, GGUF
+   2  | VAE                 | vae/, vae_approx/                 | VAE, TAESD
+   3  | Text Encoders       | clip/, text_encoders/             | CLIP, T5
+   4  | LoRAs               | loras/, loras/LyCORIS/            | LoRA, LyCORIS
+   5  | ControlNet          | controlnet/, t2i_adapter/         | ControlNet, T2I
+   6  | Upscalers           | upscale_models/                   | ESRGAN, etc.
+   7  | Embeddings          | embeddings/                       | Textual Inversion
+   8  | PhotoMaker          | photomaker/                       | PhotoMaker v1/v2
+   9  | InsightFace         | insightface/                      | ONNX Face Models
+  10  | IP-Adapter          | ipadapter/, ipadapter-flux/       | IP-Adapter
+  11  | AnimateDiff         | animatediff_models/               | Motion Modules
+  12  | SAM                 | sams/                             | Segment Anything
+  13  | Grounding DINO      | grounding-dino/                   | Object Detection
+  14  | YOLO                | ultralytics/bbox/, /segm/         | YOLO Detection
+  15  | VLM & LLM           | VLM/, LLM/                        | Vision-Language
+
+
+------------------------------------------------------------------------------
+2.3 Der 4-Phasen Flow (Modus A)
+------------------------------------------------------------------------------
+
+PHASE 1 - PREVIEW:
+  - Alle Dateien werden gescannt
+  - Für jede Datei: Typ, Base Model, Precision, etc. erkannt
+  - Neuer Name wird generiert
+  - Liste wird angezeigt (keine Änderungen noch!)
+
+PHASE 2 - KEEP/DELETE FRAGE:
+  - Sollen die Original-Dateien behalten oder gelöscht werden?
+  - [1] Installieren + Originale löschen (spart Speicher)
+  - [2] Installieren + Originale behalten (sicherer)
+  - [0] Abbrechen
+
+PHASE 3 - CONFIRMATION:
+  - Finale Bestätigung vor dem Ausführen
+  - Zeigt nochmal die Gesamtzahl und Speicher
+  - [1] Ja, ausführen
+  - [0] Nein, abbrechen
+
+PHASE 4 - INSTALLATION:
+  - Dateien werden verschoben/kopiert
+  - Duplikate werden erkannt (SHA256)
+  - Erfolgs-/Fehlermeldungen werden ausgegeben
+
+
+================================================================================
+3. QUICK START
+================================================================================
+
+------------------------------------------------------------------------------
+3.1 Installation
+------------------------------------------------------------------------------
+
+VORAUSSETZUNGEN:
+  - Python 3.10 oder höher
+  - ComfyUI installiert
+  - Ca. 50 MB freier Speicher für TensorSort selbst
+
+INSTALLATION:
+  1. Repository downloaden oder klonen
+  2. In den Ordner wechseln
+  3. Fertig - keine zusätzlichen Dependencies!
+
+
+------------------------------------------------------------------------------
+3.2 Erster Start
+------------------------------------------------------------------------------
+
+OPTION 1 - Über Startscript (empfohlen):
+
+  Windows:  Startscript_ModuleTest.bat
+
+  → Menü erscheint mit allen Optionen
+
+OPTION 2 - Direkt via Python:
+
+  python all_modules.py
+
+  → Interaktives Menü
+
+
+------------------------------------------------------------------------------
+3.3 Typischer Workflow
+------------------------------------------------------------------------------
+
+NEUE MODELLE INSTALLIEREN:
+
+  1. Dateien von CivitAI/HuggingFace downloaden
+  2. In downloads/ Ordner legen
+  3. TensorSort starten → Modus A wählen
+  4. Preview prüfen: Stimmt die Erkennung?
+  5. Bestätigen
+  6. Fertig! Dateien sind sortiert und benannt.
+
+BESTEHENDE SAMMLUNG AUFRÄUMEN:
+
+  1. TensorSort starten → Modus B wählen
+  2. Modul wählen (oder "All" für komplett-scan)
+  3. Probleme werden angezeigt
+  4. Fixes werden ausgeführt
+  5. Fertig!
+
+
+================================================================================
+4. MODUL 1 - BASE MODELS (Stable Diffusion Checkpoints)
+================================================================================
+
+------------------------------------------------------------------------------
+Was sind Base Models?
+------------------------------------------------------------------------------
+
+Base Models sind die Hauptmodelle für Stable Diffusion Bildgenerierung.
+Sie enthalten das trainierte neuronale Netzwerk (UNET), oft zusammen mit
+CLIP (Text Encoder) und VAE (Image Encoder/Decoder).
+
+VARIANTEN:
+
+  Full Checkpoint (.safetensors, .ckpt):
+    - Enthält UNET + CLIP + VAE
+    - Größe: 2-7 GB
+    - Geht in: checkpoints/
+
+  UNET-Only (.safetensors):
+    - Nur das Diffusion Model, keine Encoder
+    - Braucht separate CLIP und VAE Dateien
+    - Größe: 5-24 GB (Flux)
+    - Geht in: checkpoints/ ODER unet/ (bei Flux GGUF)
+
+  GGUF Quantisiert (.gguf):
+    - Komprimierte UNET-only Variante
+    - Spart VRAM (4-bit statt 16-bit)
+    - Größe: 4-12 GB
+    - Geht in: unet/ (WICHTIG: nicht checkpoints!)
+
+
+------------------------------------------------------------------------------
+Unterstützte Base Models
+------------------------------------------------------------------------------
+
+  FLUX Familie:
+    - Flux Development (Flux Dev)
+    - Flux Schnell
+    - Flux Pro (falls verfügbar)
+
+  SDXL Familie:
+    - SDXL Base 1.0
+    - SDXL Turbo
+    - SDXL Lightning
+
+  SDXL Fine-Tunes:
+    - Pony Diffusion V6
+    - Illustrious XL
+    - Z-Image (NoobAI)
+    - LEOSAM HelloWorld
+
+  SD 1.5 Familie:
+    - SD 1.5 Base
+    - Diverse Community Finetunes
+
+
+------------------------------------------------------------------------------
+Namenskonvention
+------------------------------------------------------------------------------
+
+TEMPLATE:
+  {BaseModel}_{Components}-{Precision}_{Category}_{Name}_{Version}.safetensors
+
+KOMPONENTEN:
+  - BaseModel:   FluxD, FluxS, SDXL, Pony, Illustrious, SD15
+  - Components:  Full (UNET+CLIP+VAE), NoVAE, NoCLIP, UNET
+  - Precision:   FP32, FP16, BF16, FP8
+  - Category:    Realism, Anime, General (optional)
+  - Name:        Bereinigter Original-Name
+  - Version:     v1, v2, etc. (falls vorhanden)
+
+BEISPIELE:
+
+  Vorher: aDetailedPurposeV2_v14e.safetensors
+  Nachher: SDXL_Full-FP16_Realism_DetailedPurpose_v14.safetensors
+
+  Vorher: flux1-dev-bnb-nf4-v2.safetensors
+  Nachher: FluxD_GGUF-Q4_K_M_Dev_v2.gguf
+
+  Vorher: ponyDiffusionV6XL_v6StartWithThisOne.safetensors
+  Nachher: Pony_Full-FP16_Pony_V6.safetensors
+
+
+------------------------------------------------------------------------------
+GGUF Quantisierung erklärt
+------------------------------------------------------------------------------
+
+GGUF ist ein Format für quantisierte (komprimierte) Modelle.
+Die Quantisierung reduziert die Präzision der Weights von 16-bit auf 4-8 bit.
+
+QUANTISIERUNGS-STUFEN:
+
+  Q2_K     - Kleinste Größe, merkliche Qualitätsverluste
+  Q3_K_S   - Klein, spürbare Verluste
+  Q3_K_M   - Guter Kompromiss für low VRAM
+  Q4_K_S   - Beliebt, minimale Verluste
+  Q4_K_M   - EMPFOHLEN: Beste Balance Größe/Qualität
+  Q5_K_S   - Hohe Qualität
+  Q5_K_M   - Sehr hohe Qualität
+  Q6_K     - Fast verlustfrei
+  Q8_0     - Quasi verlustfrei, 2x Größe von Q4
+
+"K" bedeutet "K-Quant" - eine fortschrittlichere Quantisierung die wichtige
+Weights mit höherer Präzision behält.
+
+BEISPIEL FLUX DEV:
+  Original FP16:  24 GB
+  Q8_0:           12 GB (50% kleiner)
+  Q4_K_M:          6 GB (75% kleiner)
+  Q2_K:            4 GB (83% kleiner, aber Qualitätsverluste)
+
+
+================================================================================
+5. MODUL 2 - VAE
+================================================================================
+
+------------------------------------------------------------------------------
+Was ist eine VAE?
+------------------------------------------------------------------------------
+
+VAE = Variational Autoencoder
+
+Die VAE übersetzt zwischen Pixel-Raum und Latent-Raum:
+  - Encoder: Bild → Latent (für Diffusion)
+  - Decoder: Latent → Bild (für Ausgabe)
+
+WARUM SEPARATE VAE?
+Manche Checkpoints haben "NoVAE" - dann brauchst du eine separate VAE-Datei.
+Oder du willst eine spezialisierte VAE (z.B. bessere Farben, schärfere Details).
+
+VAE-TYPEN:
+
+  Standard VAE (.safetensors):
+    - Vollständiger Encoder + Decoder
+    - Größe: 80-320 MB
+    - Ordner: vae/
+
+  VAE Approximation (TAESD):
+    - Nur Decoder, sehr schnell
+    - Für Preview während der Generation
+    - Größe: 2-5 MB
+    - Ordner: vae_approx/
+
+
+------------------------------------------------------------------------------
+Unterstützte VAE-Typen
+------------------------------------------------------------------------------
+
+  FLUX:        Flux-spezifische VAE
+  SDXL:        SDXL VAE, sdxl_vae.safetensors
+  SD 1.5:      vae-ft-mse, vae-ft-ema, kl-f8-anime
+  TAESD:       taesdxl, taesd (SD1.5), taesd3
+
+
+------------------------------------------------------------------------------
+Namenskonvention
+------------------------------------------------------------------------------
+
+TEMPLATE:
+  {BaseModel}_VAE_{Name}_{Version}.safetensors
+
+BEISPIELE:
+
+  Vorher: sdxl_vae.safetensors
+  Nachher: SDXL_VAE_Official.safetensors
+
+  Vorher: vae-ft-mse-840000-ema-pruned.safetensors
+  Nachher: SD15_VAE_FtMse.safetensors
+
+  Vorher: taesd_decoder.safetensors
+  Nachher: SD15_TAESD_Decoder.safetensors (→ vae_approx/)
+
+
+================================================================================
+6. MODUL 3 - TEXT ENCODERS (CLIP & T5)
+================================================================================
+
+------------------------------------------------------------------------------
+Was sind Text Encoders?
+------------------------------------------------------------------------------
+
+Text Encoders übersetzen Text-Prompts in Embeddings, die das Diffusion Model
+verstehen kann. Sie sind die "Sprache" des Modells.
+
+ENCODER-TYPEN:
+
+  CLIP (Contrastive Language-Image Pre-Training):
+    - OpenAI entwickelt
+    - Versteht Konzepte, Stile, Objekte
+    - Varianten: CLIP-L, CLIP-G (größer), OpenCLIP
+
+  T5 (Text-To-Text Transfer Transformer):
+    - Google entwickelt
+    - Versteht komplexere Sätze, Grammatik
+    - Für Flux notwendig (T5-XXL)
+
+  BERT:
+    - Für bestimmte Spezialmodelle (Grounding DINO)
+
+
+------------------------------------------------------------------------------
+Wann brauche ich separate Encoder?
+------------------------------------------------------------------------------
+
+  Full Checkpoint: Text Encoder ist eingebaut → nicht nötig
+  UNET-Only:       Braucht separate CLIP/T5 Dateien!
+  Flux:            Braucht CLIP-L + T5-XXL (beide!)
+
+
+------------------------------------------------------------------------------
+VRAM-Planung (KRITISCH!)
+------------------------------------------------------------------------------
+
+  ACHTUNG: Text Encoder können VRAM-Monster sein!
+
+  | Encoder     | Größe FP16 | Größe FP8 | Verwendung            |
+  |-------------|------------|-----------|------------------------|
+  | CLIP-L      | 235 MB     | ~120 MB   | SD 1.5, Teil von SDXL |
+  | OpenCLIP-G  | ~1.4 GB    | ~700 MB   | Zweiter Teil von SDXL |
+  | T5-XXL      | 9.2 GB     | 4.6 GB    | Flux - MASSIV!        |
+
+  WARNUNG: Flux mit T5-XXL in FP16 braucht allein für den Text-Encoder
+  über 9 GB VRAM! Nutze FP8-Varianten wenn VRAM knapp ist.
+
+
+------------------------------------------------------------------------------
+Ordner-Zuordnung
+------------------------------------------------------------------------------
+
+  CLIP Vision Models → clip_vision/
+  CLIP Text Encoders → clip/
+  T5 Text Encoders   → text_encoders/ (Flux T5-XXL)
+
+
+------------------------------------------------------------------------------
+Namenskonvention
+------------------------------------------------------------------------------
+
+CLIP:
+  {BaseModel}_CLIP-{Variant}_{Precision}_{Name}.safetensors
+
+  Beispiel: SDXL_CLIP-L_FP16_OpenCLIP.safetensors
+
+T5:
+  {BaseModel}_T5-{Size}_{Precision}_{Quantization}.safetensors
+
+  Beispiel: Flux_T5-XXL_FP8_Scaled.safetensors
+
+
+================================================================================
+7. MODUL 4 - LORAS & LYCORIS
+================================================================================
+
+------------------------------------------------------------------------------
+Was sind LoRAs?
+------------------------------------------------------------------------------
+
+LoRA = Low-Rank Adaptation of Large Models
+
+LoRAs sind kleine Adapter-Dateien (10-500 MB), die auf Base Models aufgesetzt
+werden, ohne das Hauptmodell zu verändern. Sie sind wie "Plugins":
+
+  - Character LoRAs:   Trainiert auf bestimmte Personen/Charaktere
+  - Style LoRAs:       Fügen Kunststile hinzu (Anime, Film Noir, etc.)
+  - Pose LoRAs:        Verbessern bestimmte Posen
+  - Enhancement LoRAs: Verbessern Details (Hände, Haut, etc.)
+
+WICHTIG: LoRAs sind Base Model spezifisch!
+  - Flux LoRA funktioniert NUR mit Flux Base Models
+  - SDXL LoRA funktioniert NUR mit SDXL Base Models
+  - SD 1.5 LoRA funktioniert NUR mit SD 1.5 Base Models
+
+
+------------------------------------------------------------------------------
+LyCORIS Varianten
+------------------------------------------------------------------------------
+
+LyCORIS = "LoRA beYond Conventional methods"
+
+Fortgeschrittenere LoRA-Trainingsmethoden:
+  - LoHa (Hadamard Product) - Expressiver
+  - LoKr (Kronecker Product) - Kompakter
+  - LoCon (LoRA with Convolution) - Für Convolution-Layer
+  - DyLoRA - Dynamischer Rang
+
+LyCORIS-Dateien werden in loras/LyCORIS/ gespeichert (separater Ordner!),
+weil ComfyUI sie intern anders behandelt.
+
+
+------------------------------------------------------------------------------
+Ordner-Zuordnung
+------------------------------------------------------------------------------
+
+  Standard LoRAs → loras/
+  LyCORIS        → loras/LyCORIS/
+
+
+------------------------------------------------------------------------------
+Namenskonvention
+------------------------------------------------------------------------------
+
+TEMPLATE:
+  {BaseModel}_{Category}_{Name}[_Trig:{trigger}]_{Version}.safetensors
+
+KATEGORIEN:
+  Character   - Personen/Figuren
+  Anatomy     - Körperdetails (Hände, Gesicht, etc.)
+  Pose        - Körperpositionen
+  Body        - Körpertypen (curvy, athletic, etc.)
+  Clothing    - Kleidung, Outfits
+  Props       - Objekte, Accessoires
+  Concept     - Szenen, Hintergründe
+  Style       - Kunststile
+  Enhancement - Qualitätsverbesserungen
+
+TRIGGER WORD:
+Falls ein LoRA ein Trigger Word hat (Aktivierungs-Keyword im Prompt),
+wird es im Dateinamen angezeigt: _Trig:keyword
+
+BEISPIELE:
+
+  Vorher: flux_pose_doggystyle_nsfw_v2.safetensors
+  Nachher: Flux_Pose_Doggystyle_Trig:doggystyle_v2.safetensors
+
+  Vorher: sdxl_emma_watson_celebrity_trained_v1.safetensors
+  Nachher: SDXL_Character_Emma-Watson_Trig:emma_watson_v1.safetensors
+
+
+================================================================================
+8. MODUL 5 - CONTROLNET & T2I-ADAPTER
+================================================================================
+
+------------------------------------------------------------------------------
+Was sind ControlNets?
+------------------------------------------------------------------------------
+
+ControlNets geben dem Diffusion Model präzise räumliche Anweisungen.
+Sie funktionieren wie "Schablonen" für die Bildkomposition.
+
+CONTROL TYPES:
+  Canny      - Edge Detection, Konturen
+  Depth      - Tiefenkarte, Perspektive
+  OpenPose   - Menschliche Posen (Skelett)
+  Lineart    - Linienzeichnung
+  Scribble   - Grobe Skizzen
+  Tile       - Detail-Erhalt beim Upscaling
+  Normal     - Surface Details, Beleuchtung
+  Seg        - Segmentierung, Objekt-Platzierung
+
+WICHTIG: ControlNets sind Base Model spezifisch!
+Ein SD 1.5 ControlNet funktioniert NICHT mit SDXL oder Flux.
+
+
+------------------------------------------------------------------------------
+T2I-Adapter
+------------------------------------------------------------------------------
+
+Leichtgewichtiger Ansatz (~300 MB statt ~700 MB für ControlNet):
+  - Schneller (läuft nur 1x am Anfang, nicht pro Iteration)
+  - Weniger präzise als ControlNet
+  - Gut für Batch-Processing
+
+
+------------------------------------------------------------------------------
+Ordner-Zuordnung
+------------------------------------------------------------------------------
+
+  ControlNet   → controlnet/
+  T2I-Adapter  → t2i_adapter/
+
+
+------------------------------------------------------------------------------
+Namenskonvention
+------------------------------------------------------------------------------
+
+CONTROLNET:
+  {BaseModel}_CN-{ControlType}_{Precision}_{Version}.safetensors
+
+  Beispiel: SD15_CN-OpenPose_FP16_v1.1.safetensors
+  Beispiel: Flux_CN-Union_BF16_pro.safetensors
+
+T2I-ADAPTER:
+  {BaseModel}_T2I-{ControlType}_{Precision}_{Version}.safetensors
+
+  Beispiel: SDXL_T2I-OpenPose_FP32_v1.0.safetensors
+
+
+------------------------------------------------------------------------------
+Flux Union ControlNet
+------------------------------------------------------------------------------
+
+Besonderheit bei Flux: Das "Union" ControlNet vereint mehrere Control Types
+in einem einzigen Modell:
+  - Ein Modell für Canny, Depth, Pose, etc.
+  - Mode-Switcher über controlnet_mode_embedder
+  - Erkennbar an Keys: controlnet_mode_embedder.*
+
+
+================================================================================
+9. MODUL 6 - UPSCALERS
+================================================================================
+
+------------------------------------------------------------------------------
+Was sind Upscalers?
+------------------------------------------------------------------------------
+
+Upscaler Models vergrößern Bilder und rekonstruieren dabei Details.
+Sie sind NICHT Base Model spezifisch - funktionieren mit jedem Bild!
+
+ARCHITEKTUREN:
+  ESRGAN       - Schnell, scharfe Details
+  Real-ESRGAN  - Optimiert für degradierte Bilder
+  SwinIR       - Beste Qualität, langsamer
+  NMKD         - Community-Favorite für Photos
+  DAT          - Ultra-Qualität, sehr langsam
+
+SPEZIALISIERUNGEN:
+  Anime    - Trainiert auf Anime-Datasets
+  Photo    - Trainiert auf realistischen Fotos
+  General  - Universal verwendbar
+  Detail   - Fokus auf Schärfe
+
+SCALE FACTORS:
+  2x - Verdoppelt Auflösung (512 → 1024)
+  4x - Vervierfacht Auflösung (512 → 2048)
+  8x - Verachtfacht Auflösung (512 → 4096)
+
+
+------------------------------------------------------------------------------
+Ordner
+------------------------------------------------------------------------------
+
+  Alle Upscaler → upscale_models/
+
+  WICHTIG: ComfyUI scannt NICHT rekursiv! Dateien müssen im Root liegen.
+
+
+------------------------------------------------------------------------------
+Namenskonvention
+------------------------------------------------------------------------------
+
+TEMPLATE:
+  Upscaler_{Scale}_{Types}_{Name}[_{Version}].{ext}
+
+BEISPIELE:
+
+  Vorher: 4x-AnimeSharp.pth
+  Nachher: Upscaler_4x_Anime-Detail_AnimeSharp.pth
+
+  Vorher: 8x_NMKD-Superscale_150000_G.pth
+  Nachher: Upscaler_8x_Photo_NMKD-Superscale.pth
+
+
+================================================================================
+10. MODUL 7 - EMBEDDINGS
+================================================================================
+
+------------------------------------------------------------------------------
+Was sind Embeddings?
+------------------------------------------------------------------------------
+
+Embeddings (Textual Inversion) sind kleine trainierte Vektoren (8-600 KB),
+die neue Konzepte in den Text Encoder einführen - ohne das Hauptmodell zu
+verändern.
+
+TYPEN:
+  Negative Embeddings - Reduzieren unerwünschte Effekte
+  Style Embeddings    - Fügen Stile hinzu
+  Concept Embeddings  - Neue Konzepte/Objekte
+  Character Embeddings - Trainiert auf Personen
+
+VERWENDUNG IN COMFYUI:
+  embedding:filename
+  (ohne Extension, ohne Pfad)
+
+
+------------------------------------------------------------------------------
+Base Model Kompatibilität
+------------------------------------------------------------------------------
+
+KRITISCH: Embeddings sind NICHT cross-kompatibel!
+
+  SD 1.5 Embeddings → Funktionieren NUR mit SD 1.5
+  SDXL Embeddings   → Funktionieren NUR mit SDXL
+
+Grund: Unterschiedliche Embedding-Dimensionen:
+  - SD 1.5:  768 Dimensionen (CLIP ViT-L/14)
+  - SDXL:   2048 Dimensionen (OpenCLIP-G + CLIP-L kombiniert)
+
+ILLUSTRIOUS-WARNUNG:
+Illustrious hat eigene CLIP-Modifikationen. Standard SDXL-Embeddings
+funktionieren damit oft SCHLECHT. TensorSort behandelt Illustrious
+daher als separates Base Model.
+
+
+------------------------------------------------------------------------------
+Ordner
+------------------------------------------------------------------------------
+
+  Alle Embeddings → embeddings/
+
+
+------------------------------------------------------------------------------
+Namenskonvention
+------------------------------------------------------------------------------
+
+TEMPLATE:
+  {BaseModel}_Embedding_{Type}_{Name}_{Version}.safetensors
+
+TYPE:
+  Pos - Positive Embedding
+  Neg - Negative Embedding
+
+BEISPIELE:
+
+  Vorher: badhandv4.safetensors
+  Nachher: SD15_Embedding_Neg_Badhand_v4.safetensors
+
+  Vorher: 90sphoto.safetensors
+  Nachher: SDXL_Embedding_Pos_90sPhoto_v1.safetensors
+
+
+================================================================================
+11. MODUL 8 - PHOTOMAKER
+================================================================================
+
+------------------------------------------------------------------------------
+Was ist PhotoMaker?
+------------------------------------------------------------------------------
+
+PhotoMaker ist ein Face Identity Preservation Model für SDXL.
+Es ermöglicht, konsistente Charaktere ohne spezielles Training zu generieren.
+
+FUNKTIONSWEISE:
+  1. User gibt 1+ Fotos einer Person als Input
+  2. PhotoMaker lernt die Gesichtsidentität (zero-shot)
+  3. Person kann in beliebigen Prompts verwendet werden
+
+VARIANTEN:
+  PhotoMaker V1 - Original (Dez 2023)
+  PhotoMaker V2 - Verbesserte ID Fidelity (Juli 2024)
+
+
+------------------------------------------------------------------------------
+Ordner
+------------------------------------------------------------------------------
+
+  PhotoMaker Modelle → photomaker/
+
+
+------------------------------------------------------------------------------
+Hinweis
+------------------------------------------------------------------------------
+
+Es gibt nur 2 offizielle PhotoMaker-Dateien (V1 und V2).
+Original-Namen werden beibehalten da es keine Verwechslungsgefahr gibt.
+
+
+================================================================================
+12. MODUL 9 - INSIGHTFACE
+================================================================================
+
+------------------------------------------------------------------------------
+Was ist InsightFace?
+------------------------------------------------------------------------------
+
+InsightFace ist ein Face Analysis Framework:
+  - Face Detection (Gesichter finden)
+  - Face Recognition (Gesichter identifizieren)
+  - Face Analysis (Alter, Geschlecht, Landmarks)
+  - Face Swapping (Gesichter austauschen)
+
+FORMAT:
+Alle InsightFace-Modelle sind ONNX-Format (.onnx), nicht .safetensors!
+
+
+------------------------------------------------------------------------------
+Model Packs
+------------------------------------------------------------------------------
+
+InsightFace Modelle kommen oft als "Packs" - Gruppen von zusammengehörenden
+Modellen:
+
+  buffalo_l Pack (326 MB total):
+    ├── det_10g.onnx       - Face Detection
+    ├── 1k3d68.onnx        - 3D Landmarks
+    ├── 2d106det.onnx      - 2D Landmarks
+    ├── genderage.onnx     - Gender/Age
+    └── w600k_r50.onnx     - Face Recognition
+
+  antelopev2 Pack:
+    - Neuere Generation für InstantID
+
+
+------------------------------------------------------------------------------
+Ordner-Struktur
+------------------------------------------------------------------------------
+
+  insightface/
+  ├── inswapper_128.onnx           (Standalone)
+  └── models/
+      ├── buffalo_l/
+      │   ├── det_10g.onnx
+      │   └── ...
+      └── antelopev2/
+          └── ...
+
+
+------------------------------------------------------------------------------
+Hinweis
+------------------------------------------------------------------------------
+
+Original-Namen werden beibehalten wegen ComfyUI-Kompatibilität.
+Die Ordner-Struktur ist wichtig - ReActor und andere Nodes erwarten
+bestimmte Pfade.
+
+
+================================================================================
+13. MODUL 10 - IP-ADAPTER
+================================================================================
+
+------------------------------------------------------------------------------
+Was ist IP-Adapter?
+------------------------------------------------------------------------------
+
+IP-Adapter = "Image Prompt Adapter"
+Ermöglicht die Nutzung von Bildern als Prompts (Image-to-Image Prompting).
+
+ANWENDUNGSFÄLLE:
+  - Style Transfer (Kunststile übertragen)
+  - Character Consistency (gleiche Person in verschiedenen Bildern)
+  - Composition Guidance (Layout von Referenzbild übernehmen)
+  - Face Identity (Gesichtsmerkmale beibehalten)
+
+
+------------------------------------------------------------------------------
+Varianten
+------------------------------------------------------------------------------
+
+  Base      - Standard, mittlere Stärke
+  Plus      - Stärker, nutzt Perceiver-Resampler
+  Light     - Sehr subtiler Einfluss
+  Face      - Optimiert für Gesichter
+  Plus-Face - Stärkere Face-Kontrolle
+  FaceID    - Nutzt InsightFace Embeddings zusätzlich
+
+
+------------------------------------------------------------------------------
+Ordner-Zuordnung (WICHTIG - 3 verschiedene!)
+------------------------------------------------------------------------------
+
+  SD 1.5 / SDXL IP-Adapter → ipadapter/
+  Flux InstantX Format     → ipadapter-flux/
+  Flux XLabs Format        → xlabs/ipadapters/
+
+WARUM 3 ORDNER?
+Die Flux IP-Adapter existieren in 2 inkompatiblen Formaten:
+  - InstantX Format (offizielles HuggingFace Format)
+  - XLabs Format (Community-Format, anders strukturiert)
+
+Wenn XLabs im falschen Ordner liegt → ComfyUI Crash!
+
+
+------------------------------------------------------------------------------
+CLIP Vision Encoder
+------------------------------------------------------------------------------
+
+IP-Adapter benötigen CLIP Vision Encoder um zu funktionieren:
+  - SD 1.5 / SDXL → ViT-H oder ViT-G
+  - Flux → SigLIP-SO400M
+
+Diese gehören zu Modul 3 (CLIP), nicht Modul 10!
+
+
+================================================================================
+14. MODUL 11 - ANIMATEDIFF
+================================================================================
+
+------------------------------------------------------------------------------
+Was ist AnimateDiff?
+------------------------------------------------------------------------------
+
+AnimateDiff erweitert Stable Diffusion mit Video-Fähigkeiten.
+Es gibt 2 Komponenten:
+
+MOTION MODULES (0.8-1.7 GB):
+  - Injizieren temporal attention layers in SD UNet
+  - Ermöglichen Video-Generierung
+  - Versionen: v1, v2, v3, Lightning
+
+MOTION LORAS (77 MB):
+  - Kleine Adapter für Kamera-Bewegungen
+  - Zoom In/Out, Pan Left/Right, Tilt, Roll
+  - Werden auf Motion Modules angewendet
+
+
+------------------------------------------------------------------------------
+Base Model Kompatibilität
+------------------------------------------------------------------------------
+
+KRITISCH: AnimateDiff ist architektur-spezifisch!
+
+  SD 1.5 Motion Modules → Funktionieren NUR mit SD 1.5
+  SDXL Motion Modules   → Funktionieren NUR mit SDXL (Beta)
+  Flux                  → Keine Unterstützung (andere Architektur)
+
+
+------------------------------------------------------------------------------
+Ordner
+------------------------------------------------------------------------------
+
+  Motion Modules → animatediff_models/
+  Motion LoRAs   → animatediff_motion_lora/
+
+
+================================================================================
+15. MODUL 12 - SAM (Segment Anything)
+================================================================================
+
+------------------------------------------------------------------------------
+Was ist SAM?
+------------------------------------------------------------------------------
+
+SAM = "Segment Anything Model" (Meta AI)
+Foundation Model für Zero-Shot Image Segmentation.
+
+FUNKTIONSWEISE:
+  - Input: Bild + Prompt (Punkt, Box oder Text)
+  - Output: Segmentierungs-Masken
+  - Funktioniert mit beliebigen Objekten ohne spezielles Training
+
+VARIANTEN:
+  ViT-H (Huge)  - Beste Qualität, 2.4 GB
+  ViT-L (Large) - Guter Kompromiss, 1.2 GB
+  ViT-B (Base)  - Schnellste, 360 MB
+  SAM-HQ        - Verbesserte Variante für feinere Kanten
+
+
+------------------------------------------------------------------------------
+Hinweis
+------------------------------------------------------------------------------
+
+SAM ist eines der einfachsten Module - es gibt nur ~7 offizielle Dateien.
+Original-Namen werden beibehalten.
+
+
+------------------------------------------------------------------------------
+Ordner
+------------------------------------------------------------------------------
+
+  SAM Modelle → sams/
+
+
+================================================================================
+16. MODUL 13 - GROUNDING DINO
+================================================================================
+
+------------------------------------------------------------------------------
+Was ist Grounding DINO?
+------------------------------------------------------------------------------
+
+Grounding DINO ist ein Open-Set Object Detection Model.
+Im Gegensatz zu YOLO (feste Klassen) kann es beliebige Objekte via
+Text-Beschreibung erkennen.
+
+FUNKTIONSWEISE:
+  - Input: Bild + Text-Prompt (z.B. "cat . dog . person")
+  - Output: Bounding Boxes + Confidence Scores
+  - Zero-Shot: Keine Training für neue Objekte nötig
+
+
+------------------------------------------------------------------------------
+Besonderheit: Datei-Paare
+------------------------------------------------------------------------------
+
+Grounding DINO hat .pth + .cfg.py Paare:
+  - .pth = Model Weights
+  - .cfg.py = Architektur-Konfiguration
+
+Beide Dateien werden zusammen benötigt!
+
+  groundingdino_swinb_cogcoor.pth
+  GroundingDINO_SwinB.cfg.py
+
+
+------------------------------------------------------------------------------
+Ordner
+------------------------------------------------------------------------------
+
+  Grounding DINO → grounding-dino/
+
+
+================================================================================
+17. MODUL 14 - YOLO
+================================================================================
+
+------------------------------------------------------------------------------
+Was ist YOLO?
+------------------------------------------------------------------------------
+
+YOLO = "You Only Look Once"
+Echtzeit-Objekterkennung mit vordefinierten Klassen.
+
+VERSIONEN:
+  YOLOv5  - Etabliert, stabil
+  YOLOv8  - Aktuell (Ultralytics)
+  YOLOv11 - Neueste Version
+
+TASK TYPES:
+  detect  - Bounding Boxes (→ bbox/)
+  segment - Pixel-genaue Masken (→ segm/)
+  pose    - Skelett-Erkennung (→ bbox/)
+  classify - Bildklassifikation (→ bbox/)
+
+
+------------------------------------------------------------------------------
+Spezialisierungen
+------------------------------------------------------------------------------
+
+  COCO80   - 80 Standardklassen (Person, Auto, etc.)
+  Face     - Gesichtserkennung
+  Hand     - Handerkennung
+  Custom   - Spezialisierte Modelle (z.B. Body Parts)
+
+
+------------------------------------------------------------------------------
+Ordner
+------------------------------------------------------------------------------
+
+  Detection/Pose/Classify → ultralytics/bbox/
+  Segmentation            → ultralytics/segm/
+
+
+------------------------------------------------------------------------------
+Namenskonvention
+------------------------------------------------------------------------------
+
+TEMPLATE:
+  YOLO_{Version}{Size}_{OutputType}_{Specialization}[_vX].pt
+
+SIZE:
+  n (Nano), s (Small), m (Medium), l (Large), x (XLarge)
+
+BEISPIELE:
+
+  Vorher: yolov8n.pt
+  Nachher: YOLO_v8n_detect_COCO80.pt
+
+  Vorher: face-yolov8m.pt
+  Nachher: YOLO_v8m_detect_Face.pt
+
+
+================================================================================
+18. MODUL 15 - VLM & LLM
+================================================================================
+
+------------------------------------------------------------------------------
+Was sind VLM und LLM?
+------------------------------------------------------------------------------
+
+VLM = Vision-Language Model
+  - Kombiniert Vision Encoder + Language Model
+  - Input: Bild + Text
+  - Output: Text (Beschreibungen, Analysen)
+  - Beispiele: Qwen-VL, LLaVA, MiniCPM-V
+
+LLM = Large Language Model
+  - Reines Sprachmodell
+  - Input: Text
+  - Output: Text
+  - Beispiele: Florence-2, GPT-Style
+
+
+------------------------------------------------------------------------------
+Unterschied zu CLIP (Modul 3)
+------------------------------------------------------------------------------
+
+  CLIP (Modul 3): Encoder-Komponente für SD (Text→Latent)
+  VLM (Modul 15): Komplettes eigenständiges Modell (Image/Text→Text)
+
+
+------------------------------------------------------------------------------
+Ordner
+------------------------------------------------------------------------------
+
+  Vision-Language Models → VLM/
+  Language Models        → LLM/
+
+
+================================================================================
+19. TECHNISCHE DETAILS
+================================================================================
+
+------------------------------------------------------------------------------
+19.1 Detection-Hierarchie
+------------------------------------------------------------------------------
+
+TensorSort priorisiert Informationsquellen nach Zuverlässigkeit:
+
+  1. TENSOR KEYS (höchste Priorität)
+     Die internen Schlüssel der Safetensors-Datei.
+     100% zuverlässig da sie die tatsächliche Struktur zeigen.
+
+     Beispiel: "double_blocks" → Flux Base Model
+               "lora_unet" → LoRA
+               "controlnet_" → ControlNet
+
+  2. TENSOR DTYPE
+     Der Datentyp der Tensoren (F16, F32, BF16).
+     Ground Truth für Precision-Erkennung.
+
+  3. METADATA
+     JSON-Metadata in der Safetensors-Datei.
+     Kann falsch sein (Training-Fehler, manuelle Änderungen).
+
+  4. FILENAME (niedrigste Priorität)
+     Der Dateiname.
+     Komplett unzuverlässig - User kann umbenennen.
+
+
+------------------------------------------------------------------------------
+19.2 Cross-Module Queue System
+------------------------------------------------------------------------------
+
+Was passiert wenn eine Datei im falschen Ordner liegt?
+
+BEISPIEL: ControlNet in loras/
+
+  PASS 1 (Scan-Only):
+    1. Modul 4 (LoRAs) scannt loras/
+    2. Findet Datei mit "controlnet_" Keys
+    3. Erkennt: "Das ist kein LoRA!"
+    4. Fügt Datei zur Queue hinzu (nicht verschieben)
+
+  PASS 2 (Execute):
+    1. Modul 5 (ControlNet) liest Queue
+    2. Findet: "Das ist meins!"
+    3. Verschiebt Datei nach controlnet/
+    4. Entfernt aus Queue
+
+Dieses 2-Pass System verhindert Dateiverlust und ermöglicht dass jedes
+Modul seine eigenen Dateien "rettet".
+
+
+------------------------------------------------------------------------------
+19.3 Duplikat-Handling
+------------------------------------------------------------------------------
+
+TensorSort erkennt Duplikate anhand des Datei-Inhalts, nicht des Namens.
+
+ABLAUF:
+  1. Size-Check (schnell): Haben beide Dateien gleiche Größe?
+  2. Hash-Check (SHA256): Sind die Inhalte identisch?
+
+BEI DUPLIKAT:
+  - Original bleibt erhalten
+  - Neue Datei wird übersprungen
+  - User wird informiert
+
+Das funktioniert auch bei unterschiedlichen Dateinamen!
+
+  downloads/awesome_lora_v2.safetensors
+  loras/Flux_Style_Awesome_v2.safetensors
+
+  → Wenn Inhalt gleich: Duplikat erkannt, nicht nochmal kopiert
+
+
+================================================================================
+20. FEHLERBEHEBUNG
+================================================================================
+
+NACH ÄNDERUNGEN: HARD REFRESH ERFORDERLICH!
+--------------------------------------------
+Nach dem TensorSort Dateien umbenannt oder verschoben hat, reicht ein
+ComfyUI-Neustart NICHT aus! Der Browser cached die alten Dateinamen.
+
+LÖSUNG:
+  Ctrl + Shift + R  (Windows/Linux)
+  Cmd + Shift + R   (Mac)
+
+Das erzwingt einen Hard Refresh und löscht den Browser-Cache.
+Erst danach werden die neuen Dateinamen in den Nodes angezeigt.
+
+
+"Error loading LoRA"
+→ LoRA ist für falsches Base Model (z.B. Flux LoRA mit SDXL Checkpoint)
+→ Prüfe den Prefix im Dateinamen: Flux_, SDXL_, SD15_
+
+"Model not found"
+→ Datei liegt im falschen Ordner
+→ Führe Modus B aus um falsch platzierte Dateien zu finden
+
+"CLIP Model required"
+→ Du verwendest ein UNET-only Modell ohne separaten CLIP
+→ Lade passenden CLIP Encoder herunter
+
+"Out of Memory (OOM)"
+→ Modell zu groß für dein VRAM
+→ Verwende GGUF-quantisiertes Modell (z.B. Q4_K_M statt FP16)
+
+"ComfyUI zeigt Datei nicht an"
+→ Prüfe ob Datei im richtigen Unterordner liegt
+→ Manche Ordner werden nicht rekursiv gescannt (z.B. upscale_models/)
+
+
+================================================================================
+21. REFERENZEN & QUELLEN
+================================================================================
+
+STABLE DIFFUSION ARCHITEKTUREN:
+  - Stability AI SDXL: https://stability.ai/stable-diffusion
+  - Black Forest Labs Flux: https://blackforestlabs.ai/
+  - HuggingFace Diffusers: https://huggingface.co/docs/diffusers
+
+COMFYUI DOKUMENTATION:
+  - ComfyUI GitHub: https://github.com/comfyanonymous/ComfyUI
+  - ComfyUI Docs: https://docs.comfy.org/
+
+CONTROLNET & T2I-ADAPTER:
+  - lllyasviel ControlNet: https://github.com/lllyasviel/ControlNet
+  - T2I-Adapter: https://github.com/TencentARC/T2I-Adapter
+
+IP-ADAPTER:
+  - IP-Adapter: https://github.com/tencent-ailab/IP-Adapter
+  - InstantX Flux: https://huggingface.co/InstantX
+  - XLabs Flux: https://huggingface.co/XLabs-AI
+
+ANIMATEDIFF:
+  - AnimateDiff: https://github.com/guoyww/AnimateDiff
+  - HotShot-XL: https://github.com/hotshotco/hotshot-xl
+
+INSIGHTFACE:
+  - InsightFace: https://github.com/deepinsight/insightface
+  - ReActor: https://github.com/Gourieff/comfyui-reactor-node
+
+SAM & GROUNDING DINO:
+  - Segment Anything: https://segment-anything.com/
+  - Grounding DINO: https://github.com/IDEA-Research/GroundingDINO
+
+YOLO:
+  - Ultralytics: https://github.com/ultralytics/ultralytics
+  - YOLOX: https://github.com/Megvii-BaseDetection/YOLOX
+
+QUANTISIERUNG:
+  - GGUF Format: https://github.com/ggerganov/ggml
+  - K-Quant Erklärung: https://github.com/ggerganov/llama.cpp
+
+
+================================================================================
+22. SUPPORT & KONTAKT
+================================================================================
+
+FRAGEN? PROBLEME? FEEDBACK?
+
+Author: K0DA Parallax Studio
+Email:  kodaparallax@gmail.com
+
+Wir helfen gerne bei:
+  - Technischen Problemen
+  - Unerkannten Dateien
+  - Feature-Requests
+  - Bug-Reports
+
+Bitte in der Email angeben:
+  - Welches Modul (1-15)
+  - Welcher Modus (A oder B)
+  - Fehlermeldung (falls vorhanden)
+  - Dateiname und Größe
+
+
+================================================================================
+                              END OF DOCUMENTATION
+================================================================================
+
+TensorSort v1.1.0
+"Weil Dateinamen lügen, aber Tensoren nicht."
+
+Author: K0DA Parallax Studio
+Email:  kodaparallax@gmail.com
+
+================================================================================

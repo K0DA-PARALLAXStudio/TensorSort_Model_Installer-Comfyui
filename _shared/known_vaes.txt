@@ -1,0 +1,70 @@
+# Bekannte VAE-Dateinamen und ihre Base Models
+# Format: filename_pattern|BaseModel|Description
+#
+# Verwendung: Wenn Script Base Model nicht aus Metadata erkennen kann,
+# wird diese Liste durchsucht.
+
+# ============================================================================
+# FLUX VAEs
+# ============================================================================
+ae.safetensors|Flux|Official Flux VAE (autoencoder)
+flux_vae.safetensors|Flux|Flux VAE
+flux1-vae.safetensors|Flux|Flux VAE
+flux-vae.safetensors|Flux|Flux VAE
+
+# ============================================================================
+# SD 1.5 VAEs
+# ============================================================================
+vae-ft-mse-840000-ema-pruned.safetensors|SD15|Official SD1.5 VAE (MSE fine-tuned, EMA)
+sd-vae-ft-mse-original.safetensors|SD15|Official SD1.5 VAE (MSE fine-tuned)
+sd-vae-ft-ema.safetensors|SD15|Official SD1.5 VAE (EMA)
+kl-f8-anime.safetensors|SD15|Anime-optimized VAE for SD1.5
+kl-f8-anime2.safetensors|SD15|Anime VAE v2 for SD1.5
+orangemix.vae.safetensors|SD15|OrangeMix VAE for SD1.5
+blessed2.vae.safetensors|SD15|Blessed2 VAE for SD1.5
+ClearVAE.safetensors|SD15|ClearVAE for SD1.5
+ClearVAE_v2.3.safetensors|SD15|ClearVAE v2.3 for SD1.5
+
+# ============================================================================
+# SD 2.1 VAEs
+# ============================================================================
+sd21-vae.safetensors|SD21|Official SD2.1 VAE
+sd-2.1-vae.safetensors|SD21|Official SD2.1 VAE
+
+# ============================================================================
+# SDXL VAEs
+# ============================================================================
+sdxl_vae.safetensors|SDXL|Official SDXL VAE
+sdxl-vae.safetensors|SDXL|Official SDXL VAE
+sdxl_vae_fp16.safetensors|SDXL|SDXL VAE FP16
+sdxl_vae_fp32.safetensors|SDXL|SDXL VAE FP32
+sdxl-vae-fp16-fix.safetensors|SDXL|SDXL VAE FP16 (fixed version)
+
+# ============================================================================
+# PONY VAEs (SDXL-basiert)
+# ============================================================================
+pony_vae.safetensors|SDXL|Pony Diffusion VAE (SDXL-based)
+ponydiffusion-vae.safetensors|SDXL|Pony Diffusion VAE
+
+# ============================================================================
+# ILLUSTRIOUS VAEs (SDXL-basiert)
+# ============================================================================
+illustrious_vae.safetensors|SDXL|Illustrious VAE (SDXL-based)
+
+# ============================================================================
+# QWEN VAEs (Multi-Modal)
+# ============================================================================
+qwen_image_vae.safetensors|Qwen|Qwen Multi-Modal Image VAE
+qwen-vl-vae.safetensors|Qwen|Qwen Vision-Language VAE
+
+# ============================================================================
+# WAN VAEs (Video)
+# ============================================================================
+wan_vae.safetensors|WAN|WAN Video VAE
+wan_2.1_vae.safetensors|WAN|WAN 2.1 Video VAE
+
+# ============================================================================
+# CUSTOM/COMMUNITY VAEs
+# ============================================================================
+hdrEffectVAE_v10.safetensors|SDXL|HDR Effect VAE for SDXL (custom)
+anime.vae.safetensors|SD15|Generic Anime VAE for SD1.5
