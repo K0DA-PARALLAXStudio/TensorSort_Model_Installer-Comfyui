@@ -34,7 +34,7 @@ TensorSort analyzes your model files by reading the actual **tensor data** insid
 
 It detects:
 - **File type**: Checkpoint, LoRA, VAE, ControlNet, Embedding, Upscaler, IP-Adapter, and more
-- **Base model**: Flux, SDXL, SD 1.5, Pony, Illustrious, Z-Image
+- **Base model**: Flux, SDXL, SD 1.5, Pony, Illustrious, Z-Image, WAN, Lotus-Depth
 - **Precision**: FP32, FP16, BF16, FP8
 - **Components**: Full, NoVAE, NoCLIP, UNET-only
 - **GGUF quantization**: Q2_K through Q8_0
@@ -125,12 +125,15 @@ At a glance: Base model, components, precision, version.
 
 ### Requirements
 
-- ComfyUI installed (any version: Portable, Manual, Pinokio, etc.)
-- That's it! ComfyUI already includes Python and all required libraries (torch, safetensors)
+- ComfyUI installed (Standard or Portable)
+- That's it!
 
-**Note for Portable ComfyUI users:**
-TensorSort automatically detects and uses the Python from your ComfyUI installation (`python_embeded/`).
-No separate Python installation required!
+**First Run:**
+TensorSort asks once for your ComfyUI path, then automatically:
+- Detects system Python with PyTorch, OR
+- Falls back to `python_embeded/` from ComfyUI Portable
+
+No manual configuration needed!
 
 ### Installation
 
@@ -175,9 +178,9 @@ python all_modules.py
 
 | # | Module | ComfyUI Folder | Handles |
 |---|--------|----------------|---------|
-| 1 | Base Models | `checkpoints/`, `unet/` | Checkpoints, GGUF |
+| 1 | Base Models | `checkpoints/`, `unet/`, `diffusion_models/` | Checkpoints, GGUF, WAN, Lotus |
 | 2 | VAE | `vae/`, `vae_approx/` | VAE, TAESD |
-| 3 | Text Encoders | `clip/`, `text_encoders/` | CLIP, T5 |
+| 3 | Text Encoders | `clip/`, `text_encoders/` | CLIP, T5, UMT5, Qwen3 |
 | 4 | LoRAs | `loras/`, `loras/LyCORIS/` | LoRA, LyCORIS |
 | 5 | ControlNet | `controlnet/`, `t2i_adapter/` | ControlNet, T2I |
 | 6 | Upscalers | `upscale_models/` | ESRGAN, SwinIR, etc. |
@@ -226,6 +229,19 @@ downloads/awesome_lora.safetensors
 loras/SDXL_Style_Awesome_v1.safetensors
 → Same content? Duplicate detected, skipped.
 ```
+
+### Recursive Scanning
+
+TensorSort scans subdirectories too:
+
+```
+downloads/
+├── Checkpoints/model.safetensors    ← Found!
+├── LoRAs/Style/lora.safetensors     ← Found!
+└── GGUF/flux.gguf                   ← Found!
+```
+
+Your folder structure stays intact until you install.
 
 ---
 
@@ -371,6 +387,6 @@ If you find this tool useful, consider supporting the development:
 ================================================================================
 ```
 
-**K0DA Parallax Studio** | 2025
+**K0DA Parallax Studio** | v1.2.0 | 2025
 
 </div>
