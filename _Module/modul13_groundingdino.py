@@ -175,9 +175,9 @@ def modus_a():
         target_folders="grounding-dino/"
     )
 
-    all_files = list(DOWNLOADS_DIR.glob("*.pth"))
-    all_files += list(DOWNLOADS_DIR.glob("*.pt"))
-    all_files += list(DOWNLOADS_DIR.glob("*.cfg.py"))
+    all_files = list(DOWNLOADS_DIR.glob("**/*.pth"))  # recursive
+    all_files += list(DOWNLOADS_DIR.glob("**/*.pt"))  # recursive
+    all_files += list(DOWNLOADS_DIR.glob("**/*.cfg.py"))  # recursive
 
     if not all_files:
         print_no_files_found("Grounding DINO files")
@@ -355,8 +355,8 @@ def modus_b(scan_only=False, batch_mode=False, preview_mode=False):
     # ========================================================================
     # SCAN OWN FOLDER
     # ========================================================================
-    all_files = list(GROUNDING_DINO_DIR.glob("*.pth"))
-    all_files += list(GROUNDING_DINO_DIR.glob("*.pt"))
+    all_files = list(GROUNDING_DINO_DIR.glob("**/*.pth"))  # recursive
+    all_files += list(GROUNDING_DINO_DIR.glob("**/*.pt"))  # recursive
 
     if not all_files:
         print_no_files_found("Grounding DINO files")
@@ -442,11 +442,11 @@ def scan_for_batch(downloads_path):
         'skipped': 0
     }
 
-    # Scan for .pth, .pt, and .cfg.py files
+    # Scan for .pth, .pt, and .cfg.py files (recursive)
     all_files = (
-        list(downloads_path.glob("*.pth")) +
-        list(downloads_path.glob("*.pt")) +
-        list(downloads_path.glob("*.cfg.py"))
+        list(downloads_path.glob("**/*.pth")) +  # recursive
+        list(downloads_path.glob("**/*.pt")) +  # recursive
+        list(downloads_path.glob("**/*.cfg.py"))  # recursive
     )
 
     for file_path in all_files:
@@ -475,11 +475,13 @@ if __name__ == "__main__":
     # Parse arguments
     mode = sys.argv[1] if len(sys.argv) > 1 else "A"
     scan_only = "--scan-only" in sys.argv
+    batch_mode = "--batch" in sys.argv
+    preview_mode = "--preview" in sys.argv
 
     if mode.upper() == "A":
         modus_a()
     elif mode.upper() == "B":
-        modus_b(scan_only=scan_only)
+        modus_b(scan_only=scan_only, batch_mode=batch_mode, preview_mode=preview_mode)
     else:
         print(f"Unknown mode: {mode}")
         print("Usage: python modul19_groundingdino.py [A|B] [--scan-only]")

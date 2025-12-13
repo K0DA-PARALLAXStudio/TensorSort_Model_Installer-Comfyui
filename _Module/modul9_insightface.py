@@ -321,7 +321,7 @@ def modus_a(dry_run=False):
         target_folders="insightface/, insightface/models/"
     )
 
-    all_files = sorted(DOWNLOADS_DIR.glob("*.onnx"))
+    all_files = sorted(DOWNLOADS_DIR.glob("**/*.onnx"))  # recursive
 
     if not all_files:
         print_no_files_found("InsightFace files")
@@ -541,7 +541,7 @@ def modus_b(scan_only=False, batch_mode=False, preview_mode=False):
     # ========================================================================
     # SCAN OWN FOLDERS
     # ========================================================================
-    root_files = list(INSIGHTFACE_DIR.glob("*.onnx")) if INSIGHTFACE_DIR.exists() else []
+    root_files = list(INSIGHTFACE_DIR.glob("**/*.onnx")) if INSIGHTFACE_DIR.exists() else []  # recursive
     models_subdir = INSIGHTFACE_DIR / "models"
     pack_files = list(models_subdir.rglob("*.onnx")) if models_subdir.exists() else []
     all_files = root_files + pack_files
@@ -699,8 +699,8 @@ def scan_for_batch(downloads_path):
         'skipped': 0
     }
 
-    # Scan for .onnx files
-    all_files = list(downloads_path.glob("*.onnx"))
+    # Scan for .onnx files (recursive)
+    all_files = list(downloads_path.glob("**/*.onnx"))  # recursive
 
     for file_path in all_files:
         is_mine, reason = is_insightface(file_path)

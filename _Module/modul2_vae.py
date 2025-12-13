@@ -470,11 +470,11 @@ def scan_for_batch(downloads_path):
     files_to_install = []
     skipped = []
 
-    # Scan for both types: .safetensors (VAE) + .pth/.pt (VAE Approx)
+    # Scan for both types: .safetensors (VAE) + .pth/.pt (VAE Approx) - recursive
     all_files = []
-    all_files.extend(downloads_path.glob("*.safetensors"))
-    all_files.extend(downloads_path.glob("*.pth"))
-    all_files.extend(downloads_path.glob("*.pt"))
+    all_files.extend(downloads_path.glob("**/*.safetensors"))
+    all_files.extend(downloads_path.glob("**/*.pth"))
+    all_files.extend(downloads_path.glob("**/*.pt"))
 
     for file_path in all_files:
         filename = file_path.name
@@ -631,7 +631,7 @@ def scan_vae_approx_for_batch(downloads_path):
     """Scans downloads/ for VAE Approx files"""
     result_files = []
 
-    for ext in ['*.pth', '*.pt', '*.safetensors']:
+    for ext in ['**/*.pth', '**/*.pt', '**/*.safetensors']:
         for file_path in downloads_path.glob(ext):
             is_approx, vae_type, details = is_vae_approx(file_path)
 
@@ -707,11 +707,11 @@ def modus_a():
         print(f"\n[ERROR] Downloads-Ordner nicht gefunden: {DOWNLOADS_PATH}")
         return
 
-    # Scanne downloads/ für BEIDE Typen
+    # Scanne downloads/ für BEIDE Typen (recursive)
     all_files = []
-    all_files.extend(DOWNLOADS_PATH.glob("*.safetensors"))
-    all_files.extend(DOWNLOADS_PATH.glob("*.pth"))
-    all_files.extend(DOWNLOADS_PATH.glob("*.pt"))
+    all_files.extend(DOWNLOADS_PATH.glob("**/*.safetensors"))
+    all_files.extend(DOWNLOADS_PATH.glob("**/*.pth"))
+    all_files.extend(DOWNLOADS_PATH.glob("**/*.pt"))
 
     if not all_files:
         print_no_files_found("VAE files")
@@ -940,9 +940,9 @@ def modus_b(scan_only=False, batch_mode=False, preview_mode=False):
             print()
 
     # ========================================================================
-    # SCAN OWN FOLDER
+    # SCAN OWN FOLDER (recursive)
     # ========================================================================
-    all_files = list(VAE_PATH.glob("*.safetensors"))
+    all_files = list(VAE_PATH.glob("**/*.safetensors"))
 
     if not all_files:
         print_no_files_found("VAE files")

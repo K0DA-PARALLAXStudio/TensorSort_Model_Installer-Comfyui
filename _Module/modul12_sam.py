@@ -142,8 +142,8 @@ def modus_a():
         target_folders="sams/"
     )
 
-    all_files = list(DOWNLOADS_DIR.glob("*.pth"))
-    all_files += list(DOWNLOADS_DIR.glob("*.pt"))
+    all_files = list(DOWNLOADS_DIR.glob("**/*.pth"))  # recursive
+    all_files += list(DOWNLOADS_DIR.glob("**/*.pt"))  # recursive
 
     if not all_files:
         print_no_files_found("SAM files")
@@ -321,8 +321,8 @@ def modus_b(scan_only=False, batch_mode=False, preview_mode=False):
     # ========================================================================
     # SCAN OWN FOLDER
     # ========================================================================
-    all_files = list(SAMS_DIR.glob("*.pth"))
-    all_files += list(SAMS_DIR.glob("*.pt"))
+    all_files = list(SAMS_DIR.glob("**/*.pth"))  # recursive
+    all_files += list(SAMS_DIR.glob("**/*.pt"))  # recursive
 
     if not all_files:
         print_no_files_found("SAM files")
@@ -409,8 +409,8 @@ def scan_for_batch(downloads_path):
         'skipped': 0
     }
 
-    # Scan for .pth and .pt files
-    all_files = list(downloads_path.glob("*.pth")) + list(downloads_path.glob("*.pt"))
+    # Scan for .pth and .pt files (recursive)
+    all_files = list(downloads_path.glob("**/*.pth")) + list(downloads_path.glob("**/*.pt"))  # recursive
 
     for file_path in all_files:
         is_mine, reason = is_sam_model(file_path)
@@ -438,11 +438,13 @@ if __name__ == "__main__":
     # Parse arguments
     mode = sys.argv[1] if len(sys.argv) > 1 else "A"
     scan_only = "--scan-only" in sys.argv
+    batch_mode = "--batch" in sys.argv
+    preview_mode = "--preview" in sys.argv
 
     if mode.upper() == "A":
         modus_a()
     elif mode.upper() == "B":
-        modus_b(scan_only=scan_only)
+        modus_b(scan_only=scan_only, batch_mode=batch_mode, preview_mode=preview_mode)
     else:
         print(f"Unknown mode: {mode}")
         print("Usage: python modul18_sam.py [A|B] [--scan-only]")

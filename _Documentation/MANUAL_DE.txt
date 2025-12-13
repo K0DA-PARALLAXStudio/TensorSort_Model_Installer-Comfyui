@@ -1,6 +1,6 @@
 ================================================================================
                     COMFYUI-TENSORSORT MODEL INSTALLER
-                      Programm-Dokumentation - v1.1.0
+                      Programm-Dokumentation - v1.2.0
 ================================================================================
 
                     "Weil Dateinamen lügen, aber Tensoren nicht."
@@ -215,31 +215,33 @@ PHASE 4 - INSTALLATION:
 ------------------------------------------------------------------------------
 
 VORAUSSETZUNGEN:
-  - Python 3.10 oder höher
   - ComfyUI installiert
-  - Ca. 50 MB freier Speicher für TensorSort selbst
+  - Eine der folgenden Python-Optionen:
+    a) System-Python 3.10+ mit PyTorch, ODER
+    b) ComfyUI Portable (python_embeded wird automatisch erkannt)
 
 INSTALLATION:
-  1. Repository downloaden oder klonen
-  2. In den Ordner wechseln
-  3. Fertig - keine zusätzlichen Dependencies!
+  1. Ordner downloaden
+  2. Doppelklick auf TensorSort_Model_Installer.bat
+  3. Beim ersten Start: ComfyUI-Pfad und Downloads-Pfad eingeben
+  4. Fertig!
 
 
 ------------------------------------------------------------------------------
 3.2 Erster Start
 ------------------------------------------------------------------------------
 
-OPTION 1 - Über Startscript (empfohlen):
+  Doppelklick auf: TensorSort_Model_Installer.bat
 
-  Windows:  Startscript_ModuleTest.bat
+  Beim ERSTEN Start (ohne Config):
+    - Falls System-Python mit PyTorch vorhanden → startet direkt
+    - Falls nicht → First-Run Setup fragt nach:
+      1. ComfyUI-Pfad (wo models/, custom_nodes/ liegen)
+      2. Downloads-Pfad (wo du Modelle herunterlädst)
+    - Config wird gespeichert (config_tensorsort.ini)
+    - python_embeded aus ComfyUI Portable wird automatisch gefunden
 
-  → Menü erscheint mit allen Optionen
-
-OPTION 2 - Direkt via Python:
-
-  python all_modules.py
-
-  → Interaktives Menü
+  → Hauptmenü erscheint
 
 
 ------------------------------------------------------------------------------
@@ -294,6 +296,12 @@ VARIANTEN:
     - Spart VRAM (4-bit statt 16-bit)
     - Größe: 4-12 GB
     - Geht in: unet/ (WICHTIG: nicht checkpoints!)
+
+  Spezielle Diffusion Models (.safetensors):
+    Diese nutzen "Load Diffusion Model" Node, NICHT CheckpointLoader:
+    - Lotus-Depth: Tiefenschätzung/Normal Maps (Kijai)
+    - Qwen-Image-Edit: 20B Bildbearbeitungs-Modell
+    - Geht in: diffusion_models/
 
 
 ------------------------------------------------------------------------------
@@ -472,6 +480,8 @@ Wann brauche ich separate Encoder?
   Full Checkpoint: Text Encoder ist eingebaut → nicht nötig
   UNET-Only:       Braucht separate CLIP/T5 Dateien!
   Flux:            Braucht CLIP-L + T5-XXL (beide!)
+  WAN Video:       Braucht UMT5-XXL
+  Z-Image:         Braucht Qwen3-4B (oder Qwen3-7B)
 
 
 ------------------------------------------------------------------------------
@@ -485,9 +495,14 @@ VRAM-Planung (KRITISCH!)
   | CLIP-L      | 235 MB     | ~120 MB   | SD 1.5, Teil von SDXL |
   | OpenCLIP-G  | ~1.4 GB    | ~700 MB   | Zweiter Teil von SDXL |
   | T5-XXL      | 9.2 GB     | 4.6 GB    | Flux - MASSIV!        |
+  | UMT5-XXL    | 11.4 GB    | 6.7 GB    | WAN Video             |
+  | Qwen3-4B    | 8.0 GB     | -         | Z-Image               |
 
   WARNUNG: Flux mit T5-XXL in FP16 braucht allein für den Text-Encoder
   über 9 GB VRAM! Nutze FP8-Varianten wenn VRAM knapp ist.
+
+  HINWEIS: Qwen3 kann auch als LLM für Chat-Nodes verwendet werden.
+  Bei Bedarf nach LLM/ kopieren oder Symlink erstellen.
 
 
 ------------------------------------------------------------------------------
@@ -497,6 +512,8 @@ Ordner-Zuordnung
   CLIP Vision Models → clip_vision/
   CLIP Text Encoders → clip/
   T5 Text Encoders   → text_encoders/ (Flux T5-XXL)
+  UMT5 Text Encoders → text_encoders/ (WAN Video)
+  Qwen3 Text Encoders→ text_encoders/ (Z-Image)
 
 
 ------------------------------------------------------------------------------
@@ -508,10 +525,17 @@ CLIP:
 
   Beispiel: SDXL_CLIP-L_FP16_OpenCLIP.safetensors
 
-T5:
-  {BaseModel}_T5-{Size}_{Precision}_{Quantization}.safetensors
+T5/UMT5:
+  {Type}_{Precision}_{BaseModel}_{Variant}.safetensors
 
-  Beispiel: Flux_T5-XXL_FP8_Scaled.safetensors
+  Beispiele:
+    T5-XXL_FP8_Flux_Scaled.safetensors
+    UMT5-XXL_FP8_WAN_Scaled.safetensors
+
+Qwen3:
+  {Type}_{Precision}_{BaseModel}.safetensors
+
+  Beispiel: Qwen3-4B_FP16_ZImage.safetensors
 
 
 ================================================================================
@@ -527,6 +551,7 @@ LoRA = Low-Rank Adaptation of Large Models
 LoRAs sind kleine Adapter-Dateien (10-500 MB), die auf Base Models aufgesetzt
 werden, ohne das Hauptmodell zu verändern. Sie sind wie "Plugins":
 
+  - Video LoRAs:       Für WAN/Animation (z.B. CausVid, SkyReels)
   - Character LoRAs:   Trainiert auf bestimmte Personen/Charaktere
   - Style LoRAs:       Fügen Kunststile hinzu (Anime, Film Noir, etc.)
   - Pose LoRAs:        Verbessern bestimmte Posen
@@ -1339,7 +1364,7 @@ Bitte in der Email angeben:
                               END OF DOCUMENTATION
 ================================================================================
 
-TensorSort v1.1.0
+TensorSort v1.2.0
 "Weil Dateinamen lügen, aber Tensoren nicht."
 
 Author: K0DA Parallax Studio

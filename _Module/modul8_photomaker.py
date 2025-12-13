@@ -216,7 +216,7 @@ def modus_a():
     # ========================================================================
     # PHASE 1: PREVIEW - Analyze all files (silently collect)
     # ========================================================================
-    all_files = list(DOWNLOADS_DIR.glob("*.bin"))
+    all_files = list(DOWNLOADS_DIR.glob("**/*.bin"))  # recursive
     files_to_install = []
     skipped = []
 
@@ -401,7 +401,7 @@ def modus_b(scan_only=False, batch_mode=False, preview_mode=False):
     # ========================================================================
     # SCAN OWN FOLDER
     # ========================================================================
-    all_files = list(PHOTOMAKER_DIR.glob("*.bin"))
+    all_files = list(PHOTOMAKER_DIR.glob("**/*.bin"))  # recursive
 
     if not all_files:
         print_no_files_found("PhotoMaker files")
@@ -526,7 +526,7 @@ def scan_for_batch(downloads_path):
         'skipped': 0
     }
 
-    all_files = list(downloads_path.glob("*.bin"))
+    all_files = list(downloads_path.glob("**/*.bin"))  # recursive
 
     for file_path in all_files:
         is_mine, reason, details = is_photomaker(file_path)

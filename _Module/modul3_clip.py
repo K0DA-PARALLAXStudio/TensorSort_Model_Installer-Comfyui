@@ -118,12 +118,14 @@ def has_vision_model_keys(keys):
 # ENCODER TYPE DETECTION
 # ============================================================================
 
-def detect_encoder_type(keys):
+def detect_encoder_type(keys, filename=""):
     """Unterscheidet: clip / text_encoder / clip_vision
 
     Returns:
         str: "clip", "text_encoder", "clip_vision", oder None
     """
+    filename_lower = filename.lower() if filename else ""
+
     # 1. CLIP Vision (Image Encoder)
     if any("vision_model" in k or "visual.transformer" in k for k in keys):
         return "clip_vision"
@@ -132,8 +134,23 @@ def detect_encoder_type(keys):
     if any("encoder.block" in k or "decoder.block" in k for k in keys):
         return "text_encoder"
 
-    # 3. Standard CLIP (Text Encoder)
-    if any("text_model.encoder" in k or "clip_l" in k or "clip_g" in k for k in keys):
+    # 3. Qwen3 Text Encoder (Z-Image) - LLM-style keys aber für Text Encoding
+    # Keys: model.layers.*.self_attn.*, model.embed_tokens.weight
+    # WICHTIG: Nur wenn "qwen" UND ("3" oder "4b") im Filename - sonst ist es ein VLM!
+    if 'qwen' in filename_lower and any(x in filename_lower for x in ['_3_', 'qwen3', '_4b', '4b.']):
+        if any("model.layers" in k and "self_attn" in k for k in keys):
+            return "text_encoder"
+
+    # 3b. Qwen2.5-VL Text Encoder (Qwen-Image-Edit) - VLM aber primär als Visual Encoder genutzt
+    # Keys: model.layers.*.self_attn.* + visual.blocks.*
+    # WICHTIG: "2.5" oder "2_5" UND "vl" im Filename
+    if 'qwen' in filename_lower and any(x in filename_lower for x in ['2.5', '2_5']) and 'vl' in filename_lower:
+        if any("model.layers" in k and "self_attn" in k for k in keys):
+            return "text_encoder"
+
+    # 4. Standard CLIP (Text Encoder)
+    # WICHTIG: Nur echte CLIP-Struktur, NICHT Embeddings die nur "clip_l"/"clip_g" als Key-Namen haben
+    if any("text_model.encoder" in k or "text_model.embeddings" in k for k in keys):
         return "clip"
 
     return None
@@ -145,6 +162,7 @@ def is_encoder(file_path):
         tuple: (bool, str, dict) - (is_encoder, reason/type, details)
     """
     keys, metadata = read_safetensors_keys(file_path)
+    filename = os.path.basename(str(file_path))
 
     if not keys:
         return False, "SKIP: Kann Keys nicht lesen", {}
@@ -162,7 +180,7 @@ def is_encoder(file_path):
         return False, "SKIP: Hat LoRA (Modul 4)", {}
 
     # Welcher Encoder-Typ?
-    encoder_type = detect_encoder_type(keys)
+    encoder_type = detect_encoder_type(keys, filename)
 
     if encoder_type:
         return True, encoder_type, {"keys": keys, "metadata": metadata}
@@ -240,8 +258,37 @@ def detect_clip_details(file_path, keys, metadata):
 # ============================================================================
 
 def detect_text_encoder_type(keys, filename):
-    """Erkennt Text Encoder Typ (T5-XXL, BERT, etc.)"""
-    # T5
+    """Erkennt Text Encoder Typ (T5-XXL, UMT5-XXL, Qwen3, BERT, etc.)"""
+    filename_lower = filename.lower()
+
+    # Qwen3 (Z-Image Text Encoder) - LLM-style für Image Generation
+    if 'qwen' in filename_lower and any(x in filename_lower for x in ['_3_', 'qwen3', '_4b', '4b.']):
+        # Größe aus Filename extrahieren
+        if '4b' in filename_lower:
+            return "Qwen3-4B"
+        elif '7b' in filename_lower:
+            return "Qwen3-7B"
+        return "Qwen3"
+
+    # Qwen2.5-VL (Qwen-Image-Edit Visual Encoder) - VLM aber primär für Image Generation
+    if 'qwen' in filename_lower and any(x in filename_lower for x in ['2.5', '2_5']) and 'vl' in filename_lower:
+        # Größe aus Filename extrahieren
+        if '3b' in filename_lower:
+            return "Qwen2.5-VL-3B"
+        elif '7b' in filename_lower:
+            return "Qwen2.5-VL-7B"
+        elif '72b' in filename_lower:
+            return "Qwen2.5-VL-72B"
+        return "Qwen2.5-VL"
+
+    # UMT5 (WAN Video) - Filename-Check VOR T5!
+    # UMT5 hat gleiche Key-Struktur wie T5 (encoder.block.*)
+    if 'umt5' in filename_lower:
+        if 'xxl' in filename_lower:
+            return "UMT5-XXL"
+        return "UMT5"
+
+    # T5 (Flux)
     if any("encoder.block" in k or "decoder.block" in k for k in keys):
         # T5-XXL vs T5-Large aus Größe oder Keys
         return "T5-XXL"
@@ -280,8 +327,17 @@ def detect_text_encoder_details(file_path, keys, metadata):
     # Precision (KRITISCH!)
     precision = detect_precision(filename, metadata)
 
-    # Base Model (T5-XXL nur für Flux)
-    base_model = "Flux" if encoder_type == "T5-XXL" else None
+    # Base Model
+    if encoder_type == "T5-XXL":
+        base_model = "Flux"
+    elif encoder_type in ("UMT5-XXL", "UMT5"):
+        base_model = "WAN"
+    elif encoder_type.startswith("Qwen3"):
+        base_model = "ZImage"
+    elif encoder_type.startswith("Qwen2.5-VL"):
+        base_model = "QwenImageEdit"
+    else:
+        base_model = None
 
     # Variant
     variant = detect_text_encoder_variant(filename)
@@ -497,7 +553,7 @@ def scan_for_batch(downloads_path):
     files_to_install = []
     skipped = []
 
-    safetensors_files = list(downloads_path.glob("*.safetensors"))
+    safetensors_files = list(downloads_path.glob("**/*.safetensors"))  # recursive
 
     for file_path in safetensors_files:
         filename = file_path.name
@@ -569,7 +625,7 @@ def modus_a():
         print(f"[ERROR] Downloads-Ordner nicht gefunden: {DOWNLOADS_DIR}")
         return
 
-    safetensors_files = list(DOWNLOADS_DIR.glob("*.safetensors"))
+    safetensors_files = list(DOWNLOADS_DIR.glob("**/*.safetensors"))  # recursive
 
     if not safetensors_files:
         print_no_files_found("text encoder files")
@@ -662,6 +718,16 @@ def modus_a():
             detected_info=file_info['detected_str'],
             target_path=f"{file_info['target_folder'].name}/{file_info['new_name']}"
         )
+        # Special note for Qwen3 (dual-use as LLM)
+        if 'qwen3' in file_info['filename'].lower() or 'qwen_3' in file_info['filename'].lower():
+            print(f"       {Colors.YELLOW}NOTE: This file can also be used as LLM for chat nodes.{Colors.RESET}")
+            print(f"       {Colors.YELLOW}      To use it there, copy to LLM/ or create a symlink.{Colors.RESET}")
+            print()  # Leerzeile NACH der Note
+        # Special note for Qwen2.5-VL (dual-use as VLM for captioning)
+        elif 'qwen' in file_info['filename'].lower() and ('2.5' in file_info['filename'] or '2_5' in file_info['filename']) and 'vl' in file_info['filename'].lower():
+            print(f"       {Colors.YELLOW}NOTE: This file can also be used as VLM for image captioning.{Colors.RESET}")
+            print(f"       {Colors.YELLOW}      To use it there, copy to VLM/ or create a symlink.{Colors.RESET}")
+            print()  # Leerzeile NACH der Note
 
     # Calculate total size
     total_size = sum(f['size_gb'] for f in files_to_install)
@@ -811,7 +877,7 @@ def modus_b(scan_only=False, batch_mode=False, preview_mode=False):
         if not folder_path.exists():
             continue
 
-        safetensors_files = list(folder_path.glob("*.safetensors"))
+        safetensors_files = list(folder_path.glob("**/*.safetensors"))  # recursive
         for file_path in safetensors_files:
             all_files.append((folder_name, folder_path, file_path))
 

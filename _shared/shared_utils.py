@@ -5,12 +5,13 @@ Shared Utilities für alle Module
 TensorSort Model Installer - Test Version
 """
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 import os
 import hashlib
 import shutil
 import json
+import configparser
 import warnings
 from pathlib import Path
 
@@ -33,35 +34,56 @@ except ImportError:
 # ============================================================================
 
 SCRIPT_DIR = Path(__file__).parent
-# Config file is in Pro_Version root (parent of _shared/)
-PRO_VERSION_DIR = SCRIPT_DIR.parent
-CONFIG_FILE = PRO_VERSION_DIR / "config_tensorsort.json"
+# Config file is in Test_Version root (parent of _shared/)
+TEST_VERSION_DIR = SCRIPT_DIR.parent
+CONFIG_FILE = TEST_VERSION_DIR / "config_tensorsort.ini"
+OLD_JSON_CONFIG = TEST_VERSION_DIR / "config_tensorsort.json"
 
 
 def load_config():
-    """Loads config from JSON (if exists)"""
+    """Loads config from INI file (with migration from old JSON if needed)"""
+
+    # Migration: Convert old JSON config to INI (one-time)
+    if OLD_JSON_CONFIG.exists() and not CONFIG_FILE.exists():
+        try:
+            with open(OLD_JSON_CONFIG, 'r', encoding='utf-8') as f:
+                old_config = json.load(f)
+            # Save as INI
+            save_config(old_config.get('comfyui_path'), old_config.get('downloads_path'))
+            # Rename old JSON to .bak
+            OLD_JSON_CONFIG.rename(OLD_JSON_CONFIG.with_suffix('.json.bak'))
+            print("[INFO] Migrated config from JSON to INI format")
+        except Exception as e:
+            print(f"[WARNING] Failed to migrate old config: {e}")
+
+    # Load INI config
     if CONFIG_FILE.exists():
         try:
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                config = json.load(f)
+            config = configparser.ConfigParser()
+            config.read(CONFIG_FILE, encoding='utf-8')
+            if 'Paths' in config:
+                comfyui = config['Paths'].get('comfyui_path', '').strip()
+                downloads = config['Paths'].get('downloads_path', '').strip()
                 return {
-                    'comfyui_path': Path(config.get('comfyui_path', '')) if config.get('comfyui_path') else None,
-                    'downloads_path': Path(config.get('downloads_path', '')) if config.get('downloads_path') else None
+                    'comfyui_path': Path(comfyui) if comfyui else None,
+                    'downloads_path': Path(downloads) if downloads else None
                 }
         except Exception as e:
             print(f"[WARNING] Failed to read config: {e}")
+
     return {'comfyui_path': None, 'downloads_path': None}
 
 
 def save_config(comfyui_path, downloads_path):
-    """Saves config as JSON"""
-    config = {
+    """Saves config as INI file"""
+    config = configparser.ConfigParser()
+    config['Paths'] = {
         'comfyui_path': str(comfyui_path) if comfyui_path else '',
         'downloads_path': str(downloads_path) if downloads_path else ''
     }
     try:
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(config, f, indent=4, ensure_ascii=False)
+            config.write(f)
         return True
     except Exception as e:
         print(f"[ERROR] Failed to save config: {e}")
@@ -465,6 +487,7 @@ MODELS_DIR = COMFYUI_BASE / "models"
 # Target Folders (für alle Module)
 CHECKPOINTS_DIR = MODELS_DIR / "checkpoints"
 UNET_DIR = MODELS_DIR / "unet"
+DIFFUSION_MODELS_DIR = MODELS_DIR / "diffusion_models"  # WAN 2.1/2.2 Video Models
 VAE_DIR = MODELS_DIR / "vae"
 CLIP_DIR = MODELS_DIR / "clip"
 TEXT_ENCODERS_DIR = MODELS_DIR / "text_encoders"
@@ -518,6 +541,60 @@ def check_duplicate(source_path, target_path):
 def find_free_suffix(target_path):
     """[TEST VERSION] Suffix generation disabled"""
     return Path(target_path)
+
+
+def check_alt_file_status(file_path):
+    """
+    Prüft ob eine Datei mit _alt Suffix ein Duplikat oder eine Variante ist.
+    [TEST VERSION] - Nur Analyse, kein Hash-Check (gibt immer 'keep' zurück)
+    """
+    import re
+
+    file_path = Path(file_path)
+    filename = file_path.stem
+    ext = file_path.suffix
+
+    # Check for _alt suffix pattern
+    alt_match = re.match(r'^(.+)_alt\d+$', filename)
+
+    if not alt_match:
+        return {
+            'has_alt_suffix': False,
+            'base_path': None,
+            'base_exists': False,
+            'is_duplicate': False,
+            'action': 'not_alt'
+        }
+
+    # Extract base name (without _alt)
+    base_name = alt_match.group(1)
+    base_path = file_path.parent / f"{base_name}{ext}"
+
+    return {
+        'has_alt_suffix': True,
+        'base_path': base_path,
+        'base_exists': base_path.exists(),
+        'is_duplicate': False,  # TEST VERSION: No hash check
+        'action': 'keep'  # TEST VERSION: Always keep
+    }
+
+
+def handle_alt_file(file_path, dry_run=False):
+    """
+    [TEST VERSION] Handhabt eine Datei mit _alt Suffix.
+    Nur Preview, keine Löschungen.
+    """
+    file_path = Path(file_path)
+    status = check_alt_file_status(file_path)
+
+    if not status['has_alt_suffix']:
+        return (False, "No _alt suffix")
+
+    if not status['base_exists']:
+        return (False, "Base file missing - could rename")
+
+    # TEST VERSION: Always report as variant (no deletion)
+    return (True, f"[TEST] Variant of {status['base_path'].name} - would check hash in Pro")
 
 
 def handle_duplicate_move(source_path, target_path, expected_target_name=None, mode="A", keep_source_option=False, dry_run=False):

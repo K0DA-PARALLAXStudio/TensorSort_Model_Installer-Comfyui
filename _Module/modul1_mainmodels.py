@@ -27,6 +27,7 @@ from shared_utils import (
     DOWNLOADS_DIR,
     CHECKPOINTS_DIR,
     UNET_DIR,
+    DIFFUSION_MODELS_DIR,
     MODELS_DIR,
     read_misplaced_files,
     add_misplaced_file,
@@ -63,6 +64,7 @@ from shared_utils import (
 DOWNLOADS_PATH = DOWNLOADS_DIR
 CHECKPOINTS_PATH = CHECKPOINTS_DIR
 UNET_PATH = UNET_DIR
+DIFFUSION_MODELS_PATH = DIFFUSION_MODELS_DIR
 
 # Größen-Grenze für Base Models
 MIN_BASE_MODEL_SIZE = 1_000_000_000  # 1GB
@@ -100,7 +102,7 @@ def read_safetensors_metadata(file_path):
 
 
 def analyze_keys(keys):
-    """Analysiert Keys für UNET/CLIP/VAE Detection"""
+    """Analysiert Keys für UNET/CLIP/VAE/WAN/Z-Image/Qwen-Edit/Lotus Detection"""
 
     unet_patterns = [
         "model.diffusion_model", "down_blocks", "up_blocks", "mid_block",
@@ -121,7 +123,33 @@ def analyze_keys(keys):
         "first_stage_model", "decoder.conv_in", "encoder.conv_in", "vae"
     ]
 
+    # WAN Video Model patterns (blocks.N.cross_attn)
+    # WAN hat "blocks.0.cross_attn" OHNE "double_blocks" oder "single_blocks"
+    has_wan = any("blocks." in k and "cross_attn" in k for k in keys)
+    has_flux_blocks = any("double_blocks" in k or "single_blocks" in k for k in keys)
+
+    # WAN = hat blocks.*.cross_attn aber NICHT Flux-style blocks
+    is_wan = has_wan and not has_flux_blocks
+
+    # Z-Image Detection (NextDiT Architektur)
+    # Unique Keys: context_refiner, noise_refiner, cap_embedder
+    is_zimage = any("context_refiner" in k or "noise_refiner" in k or "cap_embedder" in k for k in keys)
+
+    # Qwen-Image-Edit Detection
+    # Unique Key: model.diffusion_model.txt_in (hat auch img_in)
+    is_qwen_edit = any("model.diffusion_model.txt_in" in k for k in keys)
+
+    # Lotus-Depth Detection
+    # Unique Keys: class_embedding + down_blocks.*.attentions (UNet-style aber für Depth)
+    has_class_embedding = any("class_embedding" in k for k in keys)
+    has_down_attentions = any("down_blocks." in k and ".attentions." in k for k in keys)
+    is_lotus = has_class_embedding and has_down_attentions
+
     has_unet = any(any(p in k for p in unet_patterns) for k in keys)
+
+    # WAN, Z-Image, Qwen-Edit, Lotus zählen auch als "hat UNET" für is_main_model()
+    if is_wan or is_zimage or is_qwen_edit or is_lotus:
+        has_unet = True
 
     # CLIP Detection: NUR wenn NICHT Qwen3!
     has_qwen = any(any(p in k for p in qwen_patterns) for k in keys)
@@ -322,6 +350,28 @@ def detect_base_model_from_keys(keys):
     if any("qwen3_4b" in k for k in keys):
         return "ZImage"
 
+    # Qwen-Image-Edit: txt_in OHNE double_blocks/single_blocks (die hat Flux!)
+    # WICHTIG: Flux hat auch txt_in, aber zusätzlich double_blocks/single_blocks
+    has_txt_in = any("model.diffusion_model.txt_in" in k for k in keys)
+    has_flux_structure = any("double_blocks" in k or "single_blocks" in k for k in keys)
+    if has_txt_in and not has_flux_structure:
+        return "QwenImageEdit"
+
+    # Lotus-Depth: class_embedding + down_blocks.*.attentions (UNIQUE Kombination!)
+    # UNet-ähnliche Struktur aber für Depth Estimation
+    has_class_embedding = any("class_embedding" in k for k in keys)
+    has_down_attentions = any("down_blocks." in k and ".attentions." in k for k in keys)
+    if has_class_embedding and has_down_attentions:
+        return "LotusDepth"
+
+    # WAN Video Models: blocks.*.cross_attn OHNE double_blocks/single_blocks
+    # WICHTIG: VOR Flux prüfen! WAN hat auch "blocks." aber andere Struktur
+    has_wan_blocks = any("blocks." in k and "cross_attn" in k for k in keys)
+    has_flux_blocks = any("double_blocks" in k or "single_blocks" in k for k in keys)
+    if has_wan_blocks and not has_flux_blocks:
+        # WAN erkannt - Typ (I2V vs T2V) später bestimmen
+        return "WAN"
+
     # Flux: double_blocks, single_blocks
     if any("double_blocks" in k or "single_blocks" in k for k in keys):
         return "FluxD"  # Default to dev
@@ -364,6 +414,12 @@ def detect_precision_from_tensors(metadata):
     if not dtypes:
         return None
 
+    # FP8 hat Priorität - wenn vorhanden, ist es FP8 quantized
+    # (auch wenn gemischt mit F32 scale factors)
+    for dtype in dtypes.keys():
+        if "F8" in dtype or "E4M3" in dtype or "E5M2" in dtype:
+            return "FP8"
+
     # Dominanten dtype finden (>50%)
     total = sum(dtypes.values())
     for dtype, count in dtypes.items():
@@ -375,10 +431,277 @@ def detect_precision_from_tensors(metadata):
                 return "FP32"
             elif "F16" in dtype or "float16" in dtype:
                 return "FP16"
-            elif "F8" in dtype or "float8" in dtype:
-                return "FP8"
 
     return "Mixed"
+
+
+# ============================================================================
+# WAN VIDEO MODEL DETECTION
+# ============================================================================
+
+def detect_wan_type(keys):
+    """Erkennt WAN Model Type: I2V (Image-to-Video) vs T2V (Text-to-Video)
+
+    Returns:
+        str: 'I2V' oder 'T2V'
+    """
+    # I2V hat img_emb oder k_img/v_img keys
+    has_img_emb = any("img_emb" in k for k in keys)
+    has_k_img = any("k_img" in k or "v_img" in k for k in keys)
+
+    if has_img_emb or has_k_img:
+        return "I2V"
+
+    # T2V hat fps_ keys
+    has_fps = any("fps_" in k for k in keys)
+    if has_fps:
+        return "T2V"
+
+    # Default: I2V (häufiger)
+    return "I2V"
+
+
+def detect_wan_version(filename, metadata):
+    """Erkennt WAN Version aus Metadata oder Filename
+
+    Priorität: Metadata > Filename > None
+
+    Returns:
+        str or None: '2.1', '2.2', '2.5', '3.0' oder None
+    """
+    filename_lower = filename.lower()
+
+    # 1. METADATA (höchste Priorität - wenn vorhanden)
+    if metadata:
+        meta_str = str(metadata).lower()
+        if 'wan2.2' in meta_str or 'wan22' in meta_str or 'wan_2.2' in meta_str:
+            return '2.2'
+        if 'wan2.1' in meta_str or 'wan21' in meta_str or 'wan_2.1' in meta_str:
+            return '2.1'
+        if 'wan2.5' in meta_str or 'wan25' in meta_str or 'wan_2.5' in meta_str:
+            return '2.5'
+        if 'wan3.0' in meta_str or 'wan30' in meta_str or 'wan_3.0' in meta_str:
+            return '3.0'
+
+    # 2. FILENAME (sichere explizite Patterns)
+    if any(x in filename_lower for x in ['wan2.1', 'wan21', 'wan2_1']):
+        return '2.1'
+    if any(x in filename_lower for x in ['wan2.2', 'wan22', 'wan2_2']):
+        return '2.2'
+    if any(x in filename_lower for x in ['wan2.5', 'wan25', 'wan2_5']):
+        return '2.5'
+    if any(x in filename_lower for x in ['wan3.0', 'wan30', 'wan3_0']):
+        return '3.0'
+
+    # 3. FALLBACK - keine Version erkannt
+    return None
+
+
+def detect_wan_size(metadata):
+    """Erkennt WAN Model Size aus Parameter Count
+
+    Berechnet Total Parameters aus Tensor Shapes.
+
+    Returns:
+        str: '14B', '1.3B' oder 'Unknown'
+    """
+    total_params = 0
+
+    for key, value in metadata.items():
+        if key == "__metadata__":
+            continue
+        if isinstance(value, dict) and "shape" in value:
+            shape = value["shape"]
+            params = 1
+            for dim in shape:
+                params *= dim
+            total_params += params
+
+    if total_params == 0:
+        return "Unknown"
+
+    # Size Ranges (basierend auf Analyse)
+    # 14B: ~14-17B params
+    # 1.3B: ~1.3-1.5B params
+    if total_params > 10_000_000_000:  # >10B
+        return "14B"
+    elif total_params > 1_000_000_000:  # >1B
+        return "1.3B"
+    else:
+        return "Unknown"
+
+
+def extract_wan_variant_name(filename):
+    """Extrahiert Varianten-Namen aus WAN Filename
+
+    Neue Strategie: Entferne alle technischen Teile, behalte den Rest
+    So funktioniert es für JEDEN Namen - egal wie kreativ der User war.
+
+    Args:
+        filename: Original filename
+
+    Returns:
+        tuple: (variant_name, version, resolution)
+    """
+    import re
+
+    # Entferne Extension
+    name = os.path.splitext(filename)[0]
+    original_name = name  # Für CamelCase-Extraktion
+    name_lower = name.lower()
+
+    # Version extrahieren - NUR echte Versions-Marker (v2, V2, nicht 14B!)
+    # Auch V2 am Ende ohne Trennzeichen (wan22...V2FP8)
+    version_match = re.search(r'(?:^|[_\-\s])v(\d+(?:\.\d+)?)(?:[_\-\s\.]|fp|$)', name_lower)
+    if not version_match:
+        # Auch "V2" direkt vor FP8 etc.
+        version_match = re.search(r'v(\d+)(?:fp|$)', name_lower)
+    version = f"v{version_match.group(1)}" if version_match else None
+
+    # Auflösung extrahieren (480p, 540p, 720p, 1080p) - VOR dem Entfernen
+    resolution_match = re.search(r'(480|540|720|1080)p', name_lower)
+    resolution = f"{resolution_match.group(1)}P" if resolution_match else None
+
+    # Technische Teile die ENTFERNT werden (werden zu Leerzeichen)
+    tech_patterns = [
+        r'wan2?[._]?[12]?[._]?[0-9]?',  # wan, wan2, wan21, wan2.1, wan22, wan2.2
+        r'wanai',
+        r'\bai\b',  # "AI" alleine
+        r'i2v|t2v|img2vid|txt2vid',
+        r'14b|1[._]?3b|5b',
+        r'720p|480p|540p|1080p',
+        r'fp32|fp16|bf16|fp8[a-z0-9]*',
+        r'chkp|checkpoint',
+        r'safetensors|diffusion',
+        r'onthefly',
+        r'videomodel',  # "videomodel" zusammen
+        r'video\s*model',  # "video model"
+        r'\bvideo\b',  # "video" als ganzes Wort
+        r'\bmodel\b',
+        r'20gb|14gb|10gb|[0-9]+gb',  # Größenangaben
+        r'v\d+(?:fp|$)',  # Version vor FP (V2FP8)
+        r'(?:^|[_\-\s])v\d+(?:\.\d+)?(?:[_\-\s\.]|$)',  # Versions (schon extrahiert)
+        # Spezial-Keywords die wir separat extrahieren
+        r'nsfw',
+        r'fastmove',
+        r'enhanced',
+        r'cameraprompt',
+        r'camera',
+        r'prompt',
+        r'\bhigh\b',
+        r'\bdf\b',
+    ]
+
+    clean = name_lower
+    for pattern in tech_patterns:
+        clean = re.sub(pattern, ' ', clean, flags=re.IGNORECASE)
+
+    # Separatoren normalisieren
+    clean = re.sub(r'[_\-\.]+', ' ', clean)
+    clean = re.sub(r'\s+', ' ', clean).strip()
+
+    # CamelCase aus Original splitten (RadiantCrushHigh -> Radiant Crush High)
+    # Aber zusammengesetzte Namen wie SkyReels behalten
+    camel_split = re.sub(r'([a-z])([A-Z])', r'\1 \2', original_name)
+    camel_words = re.findall(r'[A-Z][a-z]+', camel_split)
+    camel_map = {w.lower(): w for w in camel_words}  # lowercase -> Original
+
+    # Bekannte zusammengesetzte Namen die nicht gesplittet werden sollen
+    compound_names = {
+        'skyreels': 'SkyReels',
+        'radiantcrush': 'RadiantCrush',
+        'fastmove': 'FastMove',
+        'cameraprompt': 'CameraPrompt',
+    }
+    camel_map.update(compound_names)
+
+    # Wörter sammeln und filtern
+    words = clean.split()
+    filtered = []
+    skip_words = ['the', 'and', 'for', 'with', 'new', 'nsfw', 'sfw', 'nsfwfastmove', 'nsfwfastmovev2', 'video', 'sky']
+
+    for word in words:
+        # Skip wenn zu kurz, nur Zahlen
+        if len(word) < 2 or word.isdigit():
+            continue
+        if word in skip_words:
+            continue
+
+        # Versuche CamelCase innerhalb des Wortes zu splitten
+        # z.B. "radiantcrushhigh" -> suche nach bekannten CamelCase-Teilen
+        found_camel = False
+        for camel in sorted(camel_map.keys(), key=len, reverse=True):
+            if camel in word and len(camel) > 3:
+                # Gefunden! Splitte das Wort
+                idx = word.find(camel)
+                before = word[:idx]
+                after = word[idx + len(camel):]
+                parts = []
+                if before and len(before) >= 2:
+                    parts.append(before.capitalize())
+                parts.append(camel_map[camel])
+                if after and len(after) >= 2:
+                    # Auch den Rest prüfen
+                    if after in camel_map:
+                        parts.append(camel_map[after])
+                    else:
+                        parts.append(after.capitalize())
+                filtered.extend(parts)
+                found_camel = True
+                break
+
+        if not found_camel:
+            filtered.append(word)
+
+    # Spezielle Keywords die immer drin sein sollen (wenn vorhanden)
+    special_keywords = []
+    if 'nsfw' in name_lower:
+        special_keywords.append('NSFW')
+    if 'sfw' in name_lower and 'nsfw' not in name_lower:
+        special_keywords.append('SFW')
+    if 'fastmove' in name_lower:
+        special_keywords.append('FastMove')
+    if 'lightning' in name_lower:
+        special_keywords.append('Lightning')
+    if 'turbo' in name_lower:
+        special_keywords.append('Turbo')
+    if 'enhanced' in name_lower:
+        special_keywords.append('Enhanced')
+    if 'cameraprompt' in name_lower or 'camera' in name_lower:
+        special_keywords.append('CameraPrompt')
+    if re.search(r'\bdf\b', name_lower):
+        special_keywords.append('DF')
+    if re.search(r'\bhigh\b', name_lower):
+        special_keywords.append('High')
+
+    # Formatiere normale Wörter mit Original-CamelCase oder compound_names
+    formatted = []
+    skip_lower = [k.lower() for k in special_keywords] + ['v2', 'v1', 'v3']  # Versions nicht als Teil des Namens
+    for word in filtered:
+        # Skip wenn es ein special keyword oder Version ist
+        if word.lower() in skip_lower:
+            continue
+        # Prüfe compound_names und camel_map
+        if word.lower() in camel_map:
+            formatted.append(camel_map[word.lower()])
+        elif word in camel_map:
+            formatted.append(camel_map[word])
+        else:
+            formatted.append(word.capitalize())
+
+    # Kombiniere: erst normale Wörter, dann special keywords
+    all_parts = formatted[:3] + special_keywords[:2]
+
+    if all_parts:
+        variant_name = "-".join(all_parts)
+    else:
+        variant_name = "Custom"
+
+    # Kürzen wenn zu lang
+    if len(variant_name) > 40:
+        variant_name = variant_name[:40].rsplit('-', 1)[0]
+
+    return variant_name, version, resolution
 
 
 def skip_metadata_value(f, value_type, version=3):
@@ -864,6 +1187,67 @@ def generate_proper_name(file_info):
     extension = file_info["extension"]
     target_folder = file_info["target_folder"]
 
+    # WAN Video Models - Spezielles Naming Schema
+    # Format: WAN{Version}_{Type}_{Size}_{Variant}_{Resolution}_{Version}_{Precision}.safetensors
+    if target_folder == "diffusion_models" and base_model.startswith("WAN"):
+        wan_version = file_info.get("wan_version", "")
+        wan_type = file_info.get("wan_type", "I2V")
+        wan_size = file_info.get("wan_size", "Unknown")
+        wan_resolution = file_info.get("wan_resolution")  # 480P, 720P, etc. or None
+
+        # Base: WAN oder WAN2.1/WAN2.2 etc.
+        if wan_version:
+            wan_base = f"WAN{wan_version}"
+        else:
+            wan_base = "WAN"
+
+        # Baue Name zusammen: WAN2.1_I2V_14B_Kijai_720P_v2_FP8
+        parts = [wan_base, wan_type, wan_size, name]
+
+        # Resolution hinzufügen wenn vorhanden
+        if wan_resolution:
+            parts.append(wan_resolution)
+
+        # Version hinzufügen wenn nicht v1 (Default)
+        if version and version != "v1":
+            parts.append(version)
+
+        parts.append(precision)
+
+        return "_".join(parts) + ".safetensors"
+
+    # Z-Image Models - Spezielles Naming Schema
+    # Format: ZImage_{Variant}_{Precision}.safetensors
+    # Beispiele: ZImage_Turbo_BF16.safetensors, ZImage_TurboAIO_FP8.safetensors
+    if base_model and (base_model.startswith("ZImage") or base_model == "ZImage"):
+        # Name enthält bereits die semantische Bedeutung (Turbo, TurboAIO, etc.)
+        parts = ["ZImage", name, precision]
+        return "_".join(parts) + ".safetensors"
+
+    # Qwen-Image-Edit - Spezielles Naming Schema
+    # Format: QwenImageEdit_{Variant}_{Version}_{Precision}.safetensors
+    # Beispiel: QwenImageEdit_2509_FP8.safetensors
+    if base_model == "QwenImageEdit":
+        parts = ["QwenImageEdit", name]
+        if version and version != "v1":
+            parts.append(version)
+        parts.append(precision)
+        return "_".join(parts) + ".safetensors"
+
+    # Lotus-Depth - Spezielles Naming Schema
+    # Format: Lotus_{Type}_{Variant}_{Version}_{Precision}.safetensors
+    # Beispiel: Lotus_Depth-G_v1_FP16.safetensors, Lotus_Depth-G_v2.1-Disparity_FP16.safetensors
+    if base_model == "LotusDepth":
+        lotus_type = file_info.get("lotus_type", "Depth-G")
+        lotus_variant = file_info.get("lotus_variant", "")
+        parts = ["Lotus", lotus_type]
+        if lotus_variant:
+            parts.append(lotus_variant)
+        if version and version != "v1":
+            parts.append(version)
+        parts.append(precision)
+        return "_".join(parts) + ".safetensors"
+
     # GGUF Format
     if extension == ".gguf":
         return f"{base_model}_GGUF-{precision}_{category}_{name}_{version}.gguf"
@@ -880,8 +1264,27 @@ def generate_proper_name(file_info):
 # PHASE 4: FOLDER LOGIC
 # ============================================================================
 
-def determine_target_folder(has_unet, has_clip, has_vae, extension):
+def determine_target_folder(has_unet, has_clip, has_vae, extension, base_model=None):
     """Bestimmt Zielordner basierend auf Components"""
+
+    # WAN Video Models → immer diffusion_models/
+    if base_model and base_model.startswith("WAN"):
+        return "diffusion_models"
+
+    # Z-Image (alle Varianten) → immer diffusion_models/
+    # Grund: Wird mit "Load Diffusion Model" Node geladen, NICHT CheckpointLoaderSimple
+    if base_model and (base_model.startswith("ZImage") or base_model == "ZImage"):
+        return "diffusion_models"
+
+    # Qwen-Image-Edit → immer diffusion_models/
+    # Grund: Wird mit "Load Diffusion Model" Node geladen
+    if base_model and base_model == "QwenImageEdit":
+        return "diffusion_models"
+
+    # Lotus-Depth → immer diffusion_models/
+    # Grund: Wird mit "Load Lotus Model" Node geladen (sucht in diffusion_models/)
+    if base_model and base_model == "LotusDepth":
+        return "diffusion_models"
 
     # GGUF → immer unet/
     if extension == ".gguf":
@@ -974,6 +1377,28 @@ def analyze_file(file_path):
         if filename_variant in ["ZImageTurbo", "ZImageEdit", "ZImageBase"]:
             base_model = filename_variant
 
+    # Pony-Check: SDXL-basiert aber eigenes Ökosystem
+    # WICHTIG: Nur sd_merge_models und explizite Basis-Felder prüfen!
+    # NICHT workflow/prompt (das sind nur Referenzen zu anderen Modellen)
+    if base_model == "SDXL":
+        # Metadata ist unter __metadata__ key (nicht direkt im Header)
+        inner_meta = metadata.get('__metadata__', {})
+
+        # 1. sd_merge_models (Modell wurde aus Pony gemerged)
+        sd_merge = str(inner_meta.get('sd_merge_models', '')).lower()
+        if 'pony' in sd_merge:
+            base_model = "Pony"
+        else:
+            # 2. Explizite Basis-Felder
+            for field in ['ss_base_model_version', 'modelspec.architecture', 'base_model', 'ss_sd_model_name']:
+                if field in inner_meta and 'pony' in str(inner_meta.get(field, '')).lower():
+                    base_model = "Pony"
+                    break
+
+        # 3. Filename als zusätzlicher Check
+        if base_model == "SDXL" and 'pony' in filename.lower():
+            base_model = "Pony"
+
     if not base_model:
         return {
             "status": "SKIP",
@@ -991,9 +1416,133 @@ def analyze_file(file_path):
     if not precision:
         precision = "FP16"  # Default
 
-    # Name & Version
+    # Target Folder (needs base_model for WAN detection)
+    target_folder = determine_target_folder(has_unet, has_clip, has_vae, extension, base_model)
+
+    # WAN-spezifische Verarbeitung
+    if base_model == "WAN":
+        wan_type = detect_wan_type(keys)
+        wan_version = detect_wan_version(filename, metadata)
+        wan_size = detect_wan_size(metadata)
+
+        # Name für WAN: Variante aus Filename extrahieren (ohne WAN-Keywords)
+        # Gibt jetzt auch resolution zurück
+        name, version, wan_resolution = extract_wan_variant_name(filename)
+
+        file_info = {
+            "status": "PROCESSED",
+            "type": "Safetensors",
+            "base_model": base_model,
+            "variant": variant,
+            "precision": precision,
+            "category": "Video",  # WAN ist immer Video
+            "name": name,
+            "version": version,
+            "extension": ".safetensors",
+            "target_folder": target_folder,
+            "has_unet": has_unet,
+            "has_clip": has_clip,
+            "has_vae": has_vae,
+            "size_gb": size_gb,
+            # WAN-spezifische Felder
+            "wan_type": wan_type,
+            "wan_version": wan_version,
+            "wan_size": wan_size,
+            "wan_resolution": wan_resolution  # NEU: 480P, 540P, 720P, etc.
+        }
+
+        file_info["proper_name"] = generate_proper_name(file_info)
+        return file_info
+
+    # Qwen-Image-Edit spezifische Verarbeitung
+    if base_model == "QwenImageEdit":
+        # Extrahiere Version aus Filename (z.B. "2509" aus "qwen_image_edit_2509_fp8")
+        import re
+        version_match = re.search(r'(\d{4})', filename)  # 4-digit version like 2509
+        name = version_match.group(1) if version_match else "Edit"
+        version = "v1"
+
+        file_info = {
+            "status": "PROCESSED",
+            "type": "Safetensors",
+            "base_model": base_model,
+            "variant": variant,
+            "precision": precision,
+            "category": "ImageEdit",
+            "name": name,
+            "version": version,
+            "extension": ".safetensors",
+            "target_folder": target_folder,
+            "has_unet": has_unet,
+            "has_clip": has_clip,
+            "has_vae": has_vae,
+            "size_gb": size_gb
+        }
+
+        file_info["proper_name"] = generate_proper_name(file_info)
+        return file_info
+
+    # Lotus-Depth spezifische Verarbeitung
+    if base_model == "LotusDepth":
+        import re
+        filename_lower = filename.lower()
+
+        # Lotus Type: depth-g, depth-d, normal-g, normal-d
+        # WICHTIG: Explizit nach "depth-g", "depth-d" etc. suchen!
+        # Nicht nur "-d" weil das auch in "depth-g-v2-1" vorkommt!
+        lotus_type = "Depth-G"  # Default
+        if "normal" in filename_lower:
+            # Normal-D oder Normal-G
+            if "normal-d" in filename_lower or "normal_d" in filename_lower:
+                lotus_type = "Normal-D"
+            else:
+                lotus_type = "Normal-G"
+        elif "depth-d" in filename_lower or "depth_d" in filename_lower:
+            # Explizit Depth-D (discriminative)
+            lotus_type = "Depth-D"
+        # Default bleibt Depth-G (generative)
+
+        # Lotus Variant: Disparity, etc.
+        lotus_variant = ""
+        if "disparity" in filename_lower:
+            lotus_variant = "Disparity"
+
+        # Version extrahieren (v1, v2, v2.1, v2-1, etc.)
+        # Auch "v2-1" Format unterstützen (wird zu "v2.1")
+        version_match = re.search(r'v(\d+)[-._](\d+)', filename_lower)
+        if version_match:
+            version = f"v{version_match.group(1)}.{version_match.group(2)}"
+        else:
+            # Einfache Version (v1, v2)
+            version_match = re.search(r'v(\d+)', filename_lower)
+            version = f"v{version_match.group(1)}" if version_match else "v1"
+
+        file_info = {
+            "status": "PROCESSED",
+            "type": "Safetensors",
+            "base_model": base_model,
+            "variant": variant,
+            "precision": precision,
+            "category": "Depth",
+            "name": lotus_type,
+            "version": version,
+            "extension": ".safetensors",
+            "target_folder": target_folder,
+            "has_unet": has_unet,
+            "has_clip": has_clip,
+            "has_vae": has_vae,
+            "size_gb": size_gb,
+            # Lotus-spezifische Felder
+            "lotus_type": lotus_type,
+            "lotus_variant": lotus_variant
+        }
+
+        file_info["proper_name"] = generate_proper_name(file_info)
+        return file_info
+
+    # Name & Version (Standard Models)
     # Z-Image: Try semantic name first
-    if base_model in ["ZImageTurbo", "ZImageBase", "ZImageEdit"]:
+    if base_model in ["ZImageTurbo", "ZImageBase", "ZImageEdit", "ZImage"]:
         semantic_name = get_zimage_semantic_name(filename, base_model, has_unet, has_clip, has_vae)
         if semantic_name:
             name = semantic_name
@@ -1007,9 +1556,6 @@ def analyze_file(file_path):
 
     # Category
     category = extract_category(filename)
-
-    # Target Folder
-    target_folder = determine_target_folder(has_unet, has_clip, has_vae, extension)
 
     file_info = {
         "status": "PROCESSED",
@@ -1045,12 +1591,12 @@ def scan_for_batch(downloads_path):
     files_to_install = []
     skipped = []
 
-    # Scan downloads
+    # Scan downloads (recursive)
     all_files = []
-    for item in os.listdir(downloads_path):
-        file_path = os.path.join(downloads_path, item)
-        if os.path.isfile(file_path) and (item.endswith(".safetensors") or item.endswith(".gguf")):
-            all_files.append(file_path)
+    for root, dirs, files_in_dir in os.walk(downloads_path):
+        for item in files_in_dir:
+            if item.endswith(".safetensors") or item.endswith(".gguf"):
+                all_files.append(os.path.join(root, item))
 
     # Analyze each file
     for file_path in all_files:
@@ -1098,12 +1644,12 @@ def modus_a_installation(downloads_path):
         target_folders="checkpoints/, unet/"
     )
 
-    # Scanne downloads/
+    # Scanne downloads/ (recursive)
     files = []
-    for item in os.listdir(downloads_path):
-        file_path = os.path.join(downloads_path, item)
-        if os.path.isfile(file_path) and (item.endswith(".safetensors") or item.endswith(".gguf")):
-            files.append(file_path)
+    for root, dirs, files_in_dir in os.walk(downloads_path):
+        for item in files_in_dir:
+            if item.endswith(".safetensors") or item.endswith(".gguf"):
+                files.append(os.path.join(root, item))
 
     if not files:
         print_no_files_found("base model files")
@@ -1204,8 +1750,13 @@ def modus_a_installation(downloads_path):
         result = file_info['result']
         filename = os.path.basename(file_path)
 
-        # Execute installation
-        target_dir = CHECKPOINTS_PATH if result['target_folder'] == "checkpoints" else UNET_PATH
+        # Execute installation - determine target directory
+        if result['target_folder'] == "checkpoints":
+            target_dir = CHECKPOINTS_PATH
+        elif result['target_folder'] == "diffusion_models":
+            target_dir = DIFFUSION_MODELS_PATH
+        else:
+            target_dir = UNET_PATH
         target_path = target_dir / result['proper_name']
 
         success, final_path, msg = handle_duplicate_move(
@@ -1234,12 +1785,13 @@ def modus_a_installation(downloads_path):
 # MODUS B - REINSTALL/CHECK
 # ============================================================================
 
-def modus_b_reinstall(checkpoints_path, unet_path, scan_only=False, batch_mode=False, preview_mode=False):
-    """Modus B: Reinstall/Check von models/checkpoints/ und models/unet/
+def modus_b_reinstall(checkpoints_path, unet_path, diffusion_models_path=None, scan_only=False, batch_mode=False, preview_mode=False):
+    """Modus B: Reinstall/Check von models/checkpoints/, models/unet/ und models/diffusion_models/
 
     Args:
         checkpoints_path: Path to checkpoints/
         unet_path: Path to unet/
+        diffusion_models_path: Path to diffusion_models/ (WAN Video Models)
         scan_only: PASS 1 - Build queue only
         batch_mode: Skip user prompts (execute fixes)
         preview_mode: Show problems only, no execution, no prompts
@@ -1250,10 +1802,10 @@ def modus_b_reinstall(checkpoints_path, unet_path, scan_only=False, batch_mode=F
     # ========================================================================
     print_mode_b_header(
         module_name="STABLE DIFFUSION MODELS",
-        folders="checkpoints/, unet/",
+        folders="checkpoints/, unet/, diffusion_models/",
         extensions="*.safetensors, *.gguf",
-        module_type="Base Models",
-        target_folders="checkpoints/, unet/",
+        module_type="Base Models + WAN Video",
+        target_folders="checkpoints/, unet/, diffusion_models/",
         preview_mode=preview_mode
     )
 
@@ -1275,7 +1827,13 @@ def modus_b_reinstall(checkpoints_path, unet_path, scan_only=False, batch_mode=F
 
                     target_folder = result["target_folder"]
                     proper_name = result["proper_name"]
-                    target_dir = CHECKPOINTS_PATH if target_folder == "checkpoints" else UNET_PATH
+                    # Determine target directory
+                    if target_folder == "checkpoints":
+                        target_dir = CHECKPOINTS_PATH
+                    elif target_folder == "diffusion_models":
+                        target_dir = DIFFUSION_MODELS_PATH
+                    else:
+                        target_dir = UNET_PATH
                     target_path = target_dir / proper_name
 
                     success, final_path, msg = handle_duplicate_move(
@@ -1304,17 +1862,26 @@ def modus_b_reinstall(checkpoints_path, unet_path, scan_only=False, batch_mode=F
     # ========================================================================
     files = []
 
+    # Recursive scan of checkpoints/
     if os.path.exists(checkpoints_path):
-        for item in os.listdir(checkpoints_path):
-            file_path = os.path.join(checkpoints_path, item)
-            if os.path.isfile(file_path) and (item.endswith(".safetensors") or item.endswith(".gguf")):
-                files.append(("checkpoints", file_path))
+        for root, dirs, files_in_dir in os.walk(checkpoints_path):
+            for item in files_in_dir:
+                if item.endswith(".safetensors") or item.endswith(".gguf"):
+                    files.append(("checkpoints", os.path.join(root, item)))
 
+    # Recursive scan of unet/
     if os.path.exists(unet_path):
-        for item in os.listdir(unet_path):
-            file_path = os.path.join(unet_path, item)
-            if os.path.isfile(file_path) and (item.endswith(".safetensors") or item.endswith(".gguf")):
-                files.append(("unet", file_path))
+        for root, dirs, files_in_dir in os.walk(unet_path):
+            for item in files_in_dir:
+                if item.endswith(".safetensors") or item.endswith(".gguf"):
+                    files.append(("unet", os.path.join(root, item)))
+
+    # Recursive scan of diffusion_models/ (WAN Video Models)
+    if diffusion_models_path and os.path.exists(diffusion_models_path):
+        for root, dirs, files_in_dir in os.walk(diffusion_models_path):
+            for item in files_in_dir:
+                if item.endswith(".safetensors"):
+                    files.append(("diffusion_models", os.path.join(root, item)))
 
     if not files:
         print_no_files_found("base model files")
@@ -1411,7 +1978,13 @@ def modus_b_reinstall(checkpoints_path, unet_path, scan_only=False, batch_mode=F
                 )
 
                 if not preview_mode:
-                    target_dir = CHECKPOINTS_PATH if target_folder == "checkpoints" else UNET_PATH
+                    # Determine target directory
+                    if target_folder == "checkpoints":
+                        target_dir = CHECKPOINTS_PATH
+                    elif target_folder == "diffusion_models":
+                        target_dir = DIFFUSION_MODELS_PATH
+                    else:
+                        target_dir = UNET_PATH
                     target_path = target_dir / proper_name
 
                     success, final_path, msg = handle_duplicate_move(
@@ -1489,7 +2062,7 @@ if __name__ == "__main__":
     if mode == "A":
         modus_a_installation(DOWNLOADS_PATH)
     elif mode == "B":
-        modus_b_reinstall(CHECKPOINTS_PATH, UNET_PATH, scan_only=scan_only, batch_mode=batch, preview_mode=preview)
+        modus_b_reinstall(CHECKPOINTS_PATH, UNET_PATH, DIFFUSION_MODELS_PATH, scan_only=scan_only, batch_mode=batch, preview_mode=preview)
     else:
         print(f"Unbekannter Modus: {mode}")
         print("Nutze 'A' für Installation oder 'B' für Reinstall/Check")

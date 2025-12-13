@@ -172,9 +172,20 @@ def is_vlm_llm(file_path):
         tuple: (bool, str, dict) - (is_vlm_llm, reason/type, details)
     """
     keys, metadata = read_safetensors_keys(file_path)
+    filename = os.path.basename(str(file_path)).lower()
 
     if not keys:
         return False, "SKIP: Kann Keys nicht lesen", {}
+
+    # AUSNAHME: Qwen3 ist ein Text Encoder für Z-Image, KEIN VLM!
+    # Wird von Modul 3 (CLIP & Text Encoders) behandelt
+    if 'qwen' in filename and any(x in filename for x in ['_3_', 'qwen3', '_4b', '4b.']):
+        return False, "SKIP: Qwen3 Text Encoder (Modul 3)", {}
+
+    # AUSNAHME: Qwen2.5-VL ist primär Visual Encoder für Qwen-Image-Edit
+    # Wird von Modul 3 (CLIP & Text Encoders) behandelt → text_encoders/
+    if 'qwen' in filename and any(x in filename for x in ['2.5', '2_5']) and 'vl' in filename:
+        return False, "SKIP: Qwen2.5-VL Visual Encoder (Modul 3)", {}
 
     # MUSS NICHT HABEN: UNET
     if has_unet_keys(keys):
@@ -497,7 +508,7 @@ def scan_for_batch(downloads_path):
     files_to_install = []
     skipped = []
 
-    safetensors_files = list(downloads_path.glob("*.safetensors"))
+    safetensors_files = list(downloads_path.glob("**/*.safetensors"))  # recursive
 
     for file_path in safetensors_files:
         filename = file_path.name
@@ -557,7 +568,7 @@ def modus_a():
         target_folders="VLM/, LLM/"
     )
 
-    all_files = list(DOWNLOADS_DIR.glob("*.safetensors"))
+    all_files = list(DOWNLOADS_DIR.glob("**/*.safetensors"))  # recursive
 
     if not all_files:
         print_no_files_found("VLM/LLM files")
@@ -793,7 +804,7 @@ def modus_b(scan_only=False, batch_mode=False, preview_mode=False):
         if not folder_path.exists():
             continue
 
-        safetensors_files = list(folder_path.glob("*.safetensors"))
+        safetensors_files = list(folder_path.glob("**/*.safetensors"))  # recursive
         for file_path in safetensors_files:
             all_files.append((folder_name, folder_path, file_path))
 

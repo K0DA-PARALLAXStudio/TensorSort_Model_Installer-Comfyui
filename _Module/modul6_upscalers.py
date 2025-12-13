@@ -464,10 +464,10 @@ def modus_a():
         target_folders="upscale_models/"
     )
 
-    # Finde alle .pth und .pt Dateien
+    # Finde alle .pth und .pt Dateien (recursive)
     all_files = []
-    all_files += list(DOWNLOADS_DIR.glob("*.pth"))
-    all_files += list(DOWNLOADS_DIR.glob("*.pt"))
+    all_files += list(DOWNLOADS_DIR.glob("**/*.pth"))  # recursive
+    all_files += list(DOWNLOADS_DIR.glob("**/*.pt"))  # recursive
 
     if not all_files:
         print_no_files_found("upscaler files")
@@ -668,8 +668,8 @@ def modus_b(scan_only=False, batch_mode=False, preview_mode=False):
     # SCAN OWN FOLDER
     # ========================================================================
     all_files = []
-    all_files += list(UPSCALE_MODELS_DIR.glob("*.pth"))
-    all_files += list(UPSCALE_MODELS_DIR.glob("*.pt"))
+    all_files += list(UPSCALE_MODELS_DIR.glob("**/*.pth"))  # recursive
+    all_files += list(UPSCALE_MODELS_DIR.glob("**/*.pt"))  # recursive
 
     if not all_files:
         print_no_files_found("upscaler files")
@@ -785,10 +785,10 @@ def scan_for_batch(downloads_path):
     """
     results = []
 
-    # Finde alle .pth und .pt Dateien
+    # Finde alle .pth und .pt Dateien (recursive)
     all_files = []
-    all_files += list(downloads_path.glob("*.pth"))
-    all_files += list(downloads_path.glob("*.pt"))
+    all_files += list(downloads_path.glob("**/*.pth"))  # recursive
+    all_files += list(downloads_path.glob("**/*.pt"))  # recursive
 
     for file_path in all_files:
         # Module Boundary Check

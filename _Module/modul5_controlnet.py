@@ -421,12 +421,13 @@ def scan_for_batch(downloads_path):
     files_to_install = []
     skipped = []
 
-    # Scan downloads
+    # Scan downloads (recursive)
     all_files = []
-    for item in os.listdir(downloads_path):
-        file_path = os.path.join(downloads_path, item)
-        if os.path.isfile(file_path) and (item.endswith(".safetensors") or item.endswith(".pth")):
-            all_files.append(file_path)
+    for root, dirs, files in os.walk(downloads_path):
+        for item in files:
+            if item.endswith(".safetensors") or item.endswith(".pth"):
+                file_path = os.path.join(root, item)
+                all_files.append(file_path)
 
     # Analyze each file
     for file_path in all_files:
@@ -475,12 +476,13 @@ def modus_a_installation(downloads_path):
         target_folders="controlnet/, t2i_adapter/"
     )
 
-    # Scanne downloads/
+    # Scanne downloads/ (recursive)
     files = []
-    for item in os.listdir(downloads_path):
-        file_path = os.path.join(downloads_path, item)
-        if os.path.isfile(file_path) and (item.endswith(".safetensors") or item.endswith(".pth")):
-            files.append(file_path)
+    for root, dirs, filenames in os.walk(downloads_path):
+        for item in filenames:
+            if item.endswith(".safetensors") or item.endswith(".pth"):
+                file_path = os.path.join(root, item)
+                files.append(file_path)
 
     if not files:
         print_no_files_found("ControlNet/T2I-Adapter files")

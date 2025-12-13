@@ -630,7 +630,7 @@ def scan_for_batch(downloads_path):
     files_to_install = []
     skipped = []
 
-    all_files = sorted(list(downloads_path.glob("*.safetensors")) + list(downloads_path.glob("*.pt")))
+    all_files = sorted(list(downloads_path.glob("**/*.safetensors")) + list(downloads_path.glob("**/*.pt")))  # recursive
 
     for file_path in all_files:
         filename = file_path.name
@@ -682,7 +682,7 @@ def modus_a():
         print(f"\n[ERROR] Downloads-Ordner nicht gefunden: {DOWNLOADS_PATH}")
         return
 
-    all_files = sorted(list(DOWNLOADS_PATH.glob("*.safetensors")) + list(DOWNLOADS_PATH.glob("*.pt")))
+    all_files = sorted(list(DOWNLOADS_PATH.glob("**/*.safetensors")) + list(DOWNLOADS_PATH.glob("**/*.pt")))  # recursive
 
     if not all_files:
         print_no_files_found("embedding files")
@@ -876,7 +876,7 @@ def modus_b(scan_only=False, batch_mode=False, preview_mode=False):
     # ========================================================================
     # SCAN OWN FOLDER
     # ========================================================================
-    all_files = sorted(list(EMBEDDINGS_PATH.glob("*.safetensors")) + list(EMBEDDINGS_PATH.glob("*.pt")))
+    all_files = sorted(list(EMBEDDINGS_PATH.glob("**/*.safetensors")) + list(EMBEDDINGS_PATH.glob("**/*.pt")))  # recursive
 
     if not all_files:
         print_no_files_found("embedding files")

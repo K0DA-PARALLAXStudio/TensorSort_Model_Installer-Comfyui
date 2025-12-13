@@ -36,7 +36,9 @@ desktop.ini
 
 # TensorSort specific
 config_tensorsort.json
+config_tensorsort.ini
 misplaced_files_queue.txt
+nul
 
 # Logs
 *.log

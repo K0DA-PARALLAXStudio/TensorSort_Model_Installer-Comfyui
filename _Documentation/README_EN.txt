@@ -1,6 +1,6 @@
 ================================================================================
                     COMFYUI-TENSORSORT MODEL INSTALLER
-                       Quick Start Guide (EN) - v1.1.0
+                       Quick Start Guide (EN) - v1.2.0
 ================================================================================
 
                     "Because filenames lie, but tensors don't."
@@ -312,7 +312,7 @@ Please include in your email:
                               GOOD LUCK!
 ================================================================================
 
-TensorSort v1.1.0
+TensorSort v1.2.0
 "Because filenames lie, but tensors don't."
 
 Author: K0DA Parallax Studio

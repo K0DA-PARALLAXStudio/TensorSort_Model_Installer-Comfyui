@@ -4,9 +4,175 @@ color 0F
 cd /d "%~dp0"
 
 REM ============================================================================
-REM STARTUP: Check paths before showing menu
+REM PHASE 1: Python Detection
 REM ============================================================================
-python -c "import sys; sys.path.insert(0, '_shared'); from shared_utils import COMFYUI_BASE, DOWNLOADS_DIR"
+
+REM Test if System-Python with torch is available
+python -c "import torch" 2>nul
+if not errorlevel 1 (
+    set PYTHON_CMD=python
+    goto :python_ready
+)
+
+REM System-Python not available or missing torch
+REM Fallback to python_embeded from ComfyUI Portable
+
+REM ============================================================================
+REM PHASE 2: Read config or First-Run Setup
+REM ============================================================================
+
+if exist "config_tensorsort.ini" (
+    REM Parse INI - find comfyui_path
+    for /f "tokens=1,2 delims==" %%a in (config_tensorsort.ini) do (
+        if "%%a"=="comfyui_path" set COMFYUI_PATH=%%b
+    )
+    goto :find_portable_python
+)
+
+REM ============================================================================
+REM First-Run Setup (no Python needed!)
+REM ============================================================================
+
+echo.
+echo    ================================================================
+echo    TENSORSORT MODEL INSTALLER - FIRST TIME SETUP
+echo    ================================================================
+echo.
+echo    No Python with PyTorch found in system.
+echo    Please provide your ComfyUI Portable path.
+echo.
+echo    ----------------------------------------------------------------
+echo    STEP 1/2: ComfyUI Installation
+echo    ----------------------------------------------------------------
+echo    Where is ComfyUI installed?
+echo    (The folder containing 'models\', 'custom_nodes\', etc.)
+echo.
+echo    Examples:
+echo      C:\ComfyUI_windows_portable\ComfyUI
+echo      D:\AI\ComfyUI
+echo.
+
+:ask_comfyui
+set /p COMFYUI_PATH="    Path: "
+if "%COMFYUI_PATH%"=="" (
+    echo    [CANCELLED] Setup cancelled.
+    pause
+    exit
+)
+
+REM ============================================================================
+REM Smart ComfyUI path validation
+REM ============================================================================
+
+REM Option 1: Direct (user entered correct ComfyUI folder)
+if exist "%COMFYUI_PATH%\models" goto :comfyui_found
+
+REM Option 2: User entered parent folder - search for ComfyUI\ inside
+if exist "%COMFYUI_PATH%\ComfyUI\models" (
+    set COMFYUI_PATH=%COMFYUI_PATH%\ComfyUI
+    echo    [AUTO] Found ComfyUI at: %COMFYUI_PATH%
+    goto :comfyui_found
+)
+
+REM Option 3: User entered grandparent - search *\ComfyUI\models
+for /d %%d in ("%COMFYUI_PATH%\*") do (
+    if exist "%%d\ComfyUI\models" (
+        set COMFYUI_PATH=%%d\ComfyUI
+        echo    [AUTO] Found ComfyUI at: %COMFYUI_PATH%
+        goto :comfyui_found
+    )
+    if exist "%%d\models" (
+        set COMFYUI_PATH=%%d
+        echo    [AUTO] Found ComfyUI at: %COMFYUI_PATH%
+        goto :comfyui_found
+    )
+)
+
+REM Nothing found - show helpful error
+echo.
+echo    [ERROR] ComfyUI not found at this path!
+echo.
+echo    You entered: %COMFYUI_PATH%
+echo.
+echo    Expected structure:
+echo      [path]\models\
+echo      [path]\custom_nodes\
+echo.
+echo    Common portable structure:
+echo      C:\...\ComfyUI_windows_portable\
+echo                 +-- python_embeded\
+echo                 +-- ComfyUI\           ^<-- enter THIS path
+echo                       +-- models\
+echo.
+echo    Tip: Enter the folder that CONTAINS 'models', not the outer folder.
+echo.
+goto :ask_comfyui
+
+:comfyui_found
+
+echo.
+echo    ----------------------------------------------------------------
+echo    STEP 2/2: Downloads Folder
+echo    ----------------------------------------------------------------
+echo    Where do you download model files?
+echo.
+echo    Examples:
+echo      C:\Users\YourName\Downloads
+echo      D:\AI\models_to_sort
+echo.
+
+:ask_downloads
+set /p DOWNLOADS_PATH="    Path: "
+if "%DOWNLOADS_PATH%"=="" (
+    echo    [CANCELLED] Setup cancelled.
+    pause
+    exit
+)
+
+REM Validate: folder must exist
+if not exist "%DOWNLOADS_PATH%" (
+    echo.
+    echo    [ERROR] Folder does not exist!
+    echo.
+    goto :ask_downloads
+)
+
+REM Save config (INI format)
+echo [Paths]> config_tensorsort.ini
+echo comfyui_path=%COMFYUI_PATH%>> config_tensorsort.ini
+echo downloads_path=%DOWNLOADS_PATH%>> config_tensorsort.ini
+
+echo.
+echo    [OK] Setup complete! Config saved.
+echo.
+
+:find_portable_python
+REM python_embeded is sibling of ComfyUI (one level up)
+set PORTABLE_PYTHON=%COMFYUI_PATH%\..\python_embeded\python.exe
+
+if exist "%PORTABLE_PYTHON%" (
+    set PYTHON_CMD=%PORTABLE_PYTHON%
+    goto :python_ready
+)
+
+REM No python_embeded found
+echo.
+echo    [ERROR] python_embeded not found!
+echo    Expected at: %PORTABLE_PYTHON%
+echo.
+echo    This tool requires either:
+echo    - System Python with PyTorch, OR
+echo    - ComfyUI Portable (with python_embeded)
+echo.
+pause
+exit
+
+:python_ready
+REM ============================================================================
+REM PHASE 3: Start Python
+REM ============================================================================
+
+%PYTHON_CMD% -c "import sys; sys.path.insert(0, '_shared'); from shared_utils import COMFYUI_BASE, DOWNLOADS_DIR"
 if errorlevel 1 (
     echo.
     echo [ERROR] Setup failed or cancelled. Press any key to exit.
@@ -18,7 +184,7 @@ if errorlevel 1 (
 cls
 echo.
 echo    ================================================================
-echo    COMFYUI-TENSORSORT MODEL INSTALLER
+echo    COMFYUI-TENSORSORT MODEL INSTALLER v1.2.0
 echo    ================================================================
 echo.
 echo    Intelligent model organizer for ComfyUI
@@ -215,7 +381,7 @@ REM ===================================================================
 :mode_a_module1
 cls
 cd /d "%~dp0"
-python _Module\modul1_mainmodels.py A
+%PYTHON_CMD% _Module\modul1_mainmodels.py A
 if errorlevel 1 goto mode_a_individual
 pause
 goto mode_a_individual
@@ -227,7 +393,7 @@ REM ===================================================================
 :mode_a_module2
 cls
 cd /d "%~dp0"
-python _Module\modul2_vae.py A
+%PYTHON_CMD% _Module\modul2_vae.py A
 if errorlevel 1 goto mode_a_individual
 pause
 goto mode_a_individual
@@ -239,7 +405,7 @@ REM ===================================================================
 :mode_a_module3
 cls
 cd /d "%~dp0"
-python _Module\modul3_clip.py A
+%PYTHON_CMD% _Module\modul3_clip.py A
 if errorlevel 1 goto mode_a_individual
 pause
 goto mode_a_individual
@@ -251,7 +417,7 @@ REM ===================================================================
 :mode_a_module4
 cls
 cd /d "%~dp0"
-python _Module\modul4_loras.py A
+%PYTHON_CMD% _Module\modul4_loras.py A
 if errorlevel 1 goto mode_a_individual
 pause
 goto mode_a_individual
@@ -263,7 +429,7 @@ REM ===================================================================
 :mode_a_module5
 cls
 cd /d "%~dp0"
-python _Module\modul5_controlnet.py A
+%PYTHON_CMD% _Module\modul5_controlnet.py A
 if errorlevel 1 goto mode_a_individual
 pause
 goto mode_a_individual
@@ -275,7 +441,7 @@ REM ===================================================================
 :mode_a_module6
 cls
 cd /d "%~dp0"
-python _Module\modul6_upscalers.py A
+%PYTHON_CMD% _Module\modul6_upscalers.py A
 if errorlevel 1 goto mode_a_individual
 pause
 goto mode_a_individual
@@ -287,7 +453,7 @@ REM ===================================================================
 :mode_a_module7
 cls
 cd /d "%~dp0"
-python _Module\modul7_embeddings.py A
+%PYTHON_CMD% _Module\modul7_embeddings.py A
 if errorlevel 1 goto mode_a_individual
 pause
 goto mode_a_individual
@@ -299,7 +465,7 @@ REM ===================================================================
 :mode_a_module8
 cls
 cd /d "%~dp0"
-python _Module\modul8_photomaker.py A
+%PYTHON_CMD% _Module\modul8_photomaker.py A
 if errorlevel 1 goto mode_a_individual
 pause
 goto mode_a_individual
@@ -311,7 +477,7 @@ REM ===================================================================
 :mode_a_module9
 cls
 cd /d "%~dp0"
-python _Module\modul9_insightface.py A
+%PYTHON_CMD% _Module\modul9_insightface.py A
 if errorlevel 1 goto mode_a_individual
 pause
 goto mode_a_individual
@@ -323,7 +489,7 @@ REM ===================================================================
 :mode_a_module10
 cls
 cd /d "%~dp0"
-python _Module\modul10_ipadapter.py A
+%PYTHON_CMD% _Module\modul10_ipadapter.py A
 if errorlevel 1 goto mode_a_individual
 pause
 goto mode_a_individual
@@ -335,7 +501,7 @@ REM ===================================================================
 :mode_a_module11
 cls
 cd /d "%~dp0"
-python _Module\modul11_animatediff.py A
+%PYTHON_CMD% _Module\modul11_animatediff.py A
 if errorlevel 1 goto mode_a_individual
 pause
 goto mode_a_individual
@@ -347,7 +513,7 @@ REM ===================================================================
 :mode_a_module12
 cls
 cd /d "%~dp0"
-python _Module\modul12_sam.py A
+%PYTHON_CMD% _Module\modul12_sam.py A
 if errorlevel 1 goto mode_a_individual
 pause
 goto mode_a_individual
@@ -359,7 +525,7 @@ REM ===================================================================
 :mode_a_module13
 cls
 cd /d "%~dp0"
-python _Module\modul13_groundingdino.py A
+%PYTHON_CMD% _Module\modul13_groundingdino.py A
 if errorlevel 1 goto mode_a_individual
 pause
 goto mode_a_individual
@@ -371,7 +537,7 @@ REM ===================================================================
 :mode_a_module14
 cls
 cd /d "%~dp0"
-python _Module\modul14_yolo.py A
+%PYTHON_CMD% _Module\modul14_yolo.py A
 if errorlevel 1 goto mode_a_individual
 pause
 goto mode_a_individual
@@ -383,7 +549,7 @@ REM ===================================================================
 :mode_a_module15
 cls
 cd /d "%~dp0"
-python _Module\modul15_vlm_llm.py A
+%PYTHON_CMD% _Module\modul15_vlm_llm.py A
 if errorlevel 1 goto mode_a_individual
 pause
 goto mode_a_individual
@@ -395,7 +561,7 @@ REM ===================================================================
 :mode_a_all
 cls
 cd /d "%~dp0"
-python _Module\all_modules.py A
+%PYTHON_CMD% _Module\all_modules.py A
 if errorlevel 1 goto mode_a_menu
 pause
 goto mode_a_menu
@@ -407,7 +573,7 @@ REM ===================================================================
 :mode_b_module1
 cls
 cd /d "%~dp0"
-python _Module\modul1_mainmodels.py B --preview
+%PYTHON_CMD% _Module\modul1_mainmodels.py B --preview
 echo.
 echo ===============================================================================
 echo [1] Execute fixes
@@ -418,10 +584,12 @@ set /p choice="Your choice [1/0]: "
 if "%choice%"=="1" (
     echo.
     echo Executing fixes...
-    python _Module\modul1_mainmodels.py B
+    %PYTHON_CMD% _Module\modul1_mainmodels.py B
     echo.
-    pause
 )
+echo.
+echo Press any key to continue...
+pause >nul
 goto mode_b_individual
 
 REM ===================================================================
@@ -431,7 +599,7 @@ REM ===================================================================
 :mode_b_module2
 cls
 cd /d "%~dp0"
-python _Module\modul2_vae.py B --preview
+%PYTHON_CMD% _Module\modul2_vae.py B --preview
 echo.
 echo ===============================================================================
 echo [1] Execute fixes
@@ -442,10 +610,12 @@ set /p choice="Your choice [1/0]: "
 if "%choice%"=="1" (
     echo.
     echo Executing fixes...
-    python _Module\modul2_vae.py B
+    %PYTHON_CMD% _Module\modul2_vae.py B
     echo.
-    pause
 )
+echo.
+echo Press any key to continue...
+pause >nul
 goto mode_b_individual
 
 
@@ -456,7 +626,7 @@ REM ===================================================================
 :mode_b_module3
 cls
 cd /d "%~dp0"
-python _Module\modul3_clip.py B --preview
+%PYTHON_CMD% _Module\modul3_clip.py B --preview
 echo.
 echo ===============================================================================
 echo [1] Execute fixes
@@ -467,10 +637,12 @@ set /p choice="Your choice [1/0]: "
 if "%choice%"=="1" (
     echo.
     echo Executing fixes...
-    python _Module\modul3_clip.py B
+    %PYTHON_CMD% _Module\modul3_clip.py B
     echo.
-    pause
 )
+echo.
+echo Press any key to continue...
+pause >nul
 goto mode_b_individual
 
 
@@ -481,7 +653,7 @@ REM ===================================================================
 :mode_b_module4
 cls
 cd /d "%~dp0"
-python _Module\modul4_loras.py B --preview
+%PYTHON_CMD% _Module\modul4_loras.py B --preview
 echo.
 echo ===============================================================================
 echo [1] Execute fixes
@@ -492,10 +664,12 @@ set /p choice="Your choice [1/0]: "
 if "%choice%"=="1" (
     echo.
     echo Executing fixes...
-    python _Module\modul4_loras.py B
+    %PYTHON_CMD% _Module\modul4_loras.py B
     echo.
-    pause
 )
+echo.
+echo Press any key to continue...
+pause >nul
 goto mode_b_individual
 
 REM ===================================================================
@@ -505,7 +679,7 @@ REM ===================================================================
 :mode_b_module5
 cls
 cd /d "%~dp0"
-python _Module\modul5_controlnet.py B --preview
+%PYTHON_CMD% _Module\modul5_controlnet.py B --preview
 echo.
 echo ===============================================================================
 echo [1] Execute fixes
@@ -516,10 +690,12 @@ set /p choice="Your choice [1/0]: "
 if "%choice%"=="1" (
     echo.
     echo Executing fixes...
-    python _Module\modul5_controlnet.py B
+    %PYTHON_CMD% _Module\modul5_controlnet.py B
     echo.
-    pause
 )
+echo.
+echo Press any key to continue...
+pause >nul
 goto mode_b_individual
 
 REM ===================================================================
@@ -529,7 +705,7 @@ REM ===================================================================
 :mode_b_module6
 cls
 cd /d "%~dp0"
-python _Module\modul6_upscalers.py B --preview
+%PYTHON_CMD% _Module\modul6_upscalers.py B --preview
 echo.
 echo ===============================================================================
 echo [1] Execute fixes
@@ -540,10 +716,12 @@ set /p choice="Your choice [1/0]: "
 if "%choice%"=="1" (
     echo.
     echo Executing fixes...
-    python _Module\modul6_upscalers.py B
+    %PYTHON_CMD% _Module\modul6_upscalers.py B
     echo.
-    pause
 )
+echo.
+echo Press any key to continue...
+pause >nul
 goto mode_b_individual
 
 REM ===================================================================
@@ -553,7 +731,7 @@ REM ===================================================================
 :mode_b_module7
 cls
 cd /d "%~dp0"
-python _Module\modul7_embeddings.py B --preview
+%PYTHON_CMD% _Module\modul7_embeddings.py B --preview
 echo.
 echo ===============================================================================
 echo [1] Execute fixes
@@ -564,10 +742,12 @@ set /p choice="Your choice [1/0]: "
 if "%choice%"=="1" (
     echo.
     echo Executing fixes...
-    python _Module\modul7_embeddings.py B
+    %PYTHON_CMD% _Module\modul7_embeddings.py B
     echo.
-    pause
 )
+echo.
+echo Press any key to continue...
+pause >nul
 goto mode_b_individual
 
 REM ===================================================================
@@ -577,7 +757,7 @@ REM ===================================================================
 :mode_b_module8
 cls
 cd /d "%~dp0"
-python _Module\modul8_photomaker.py B --preview
+%PYTHON_CMD% _Module\modul8_photomaker.py B --preview
 echo.
 echo ===============================================================================
 echo [1] Execute fixes
@@ -588,10 +768,12 @@ set /p choice="Your choice [1/0]: "
 if "%choice%"=="1" (
     echo.
     echo Executing fixes...
-    python _Module\modul8_photomaker.py B
+    %PYTHON_CMD% _Module\modul8_photomaker.py B
     echo.
-    pause
 )
+echo.
+echo Press any key to continue...
+pause >nul
 goto mode_b_individual
 
 REM ===================================================================
@@ -601,7 +783,7 @@ REM ===================================================================
 :mode_b_module9
 cls
 cd /d "%~dp0"
-python _Module\modul9_insightface.py B --preview
+%PYTHON_CMD% _Module\modul9_insightface.py B --preview
 echo.
 echo ===============================================================================
 echo [1] Execute fixes
@@ -612,10 +794,12 @@ set /p choice="Your choice [1/0]: "
 if "%choice%"=="1" (
     echo.
     echo Executing fixes...
-    python _Module\modul9_insightface.py B
+    %PYTHON_CMD% _Module\modul9_insightface.py B
     echo.
-    pause
 )
+echo.
+echo Press any key to continue...
+pause >nul
 goto mode_b_individual
 
 REM ===================================================================
@@ -625,7 +809,7 @@ REM ===================================================================
 :mode_b_module10
 cls
 cd /d "%~dp0"
-python _Module\modul10_ipadapter.py B --preview
+%PYTHON_CMD% _Module\modul10_ipadapter.py B --preview
 echo.
 echo ===============================================================================
 echo [1] Execute fixes
@@ -636,10 +820,12 @@ set /p choice="Your choice [1/0]: "
 if "%choice%"=="1" (
     echo.
     echo Executing fixes...
-    python _Module\modul10_ipadapter.py B
+    %PYTHON_CMD% _Module\modul10_ipadapter.py B
     echo.
-    pause
 )
+echo.
+echo Press any key to continue...
+pause >nul
 goto mode_b_individual
 
 REM ===================================================================
@@ -649,7 +835,7 @@ REM ===================================================================
 :mode_b_module11
 cls
 cd /d "%~dp0"
-python _Module\modul11_animatediff.py B --preview
+%PYTHON_CMD% _Module\modul11_animatediff.py B --preview
 echo.
 echo ===============================================================================
 echo [1] Execute fixes
@@ -660,10 +846,12 @@ set /p choice="Your choice [1/0]: "
 if "%choice%"=="1" (
     echo.
     echo Executing fixes...
-    python _Module\modul11_animatediff.py B
+    %PYTHON_CMD% _Module\modul11_animatediff.py B
     echo.
-    pause
 )
+echo.
+echo Press any key to continue...
+pause >nul
 goto mode_b_individual
 
 REM ===================================================================
@@ -673,7 +861,7 @@ REM ===================================================================
 :mode_b_module12
 cls
 cd /d "%~dp0"
-python _Module\modul12_sam.py B --preview
+%PYTHON_CMD% _Module\modul12_sam.py B --preview
 echo.
 echo ===============================================================================
 echo [1] Execute (no fixes needed - SAM keeps original names)
@@ -683,9 +871,11 @@ echo.
 set /p execute="Your choice [1/0]: "
 if "%execute%"=="1" (
     cls
-    python _Module\modul12_sam.py B
-    pause
+    %PYTHON_CMD% _Module\modul12_sam.py B
 )
+echo.
+echo Press any key to continue...
+pause >nul
 goto mode_b_individual
 
 REM ===================================================================
@@ -695,7 +885,7 @@ REM ===================================================================
 :mode_b_module13
 cls
 cd /d "%~dp0"
-python _Module\modul13_groundingdino.py B --preview
+%PYTHON_CMD% _Module\modul13_groundingdino.py B --preview
 echo.
 echo ===============================================================================
 echo [1] Execute (no fixes needed - Grounding DINO keeps original names)
@@ -705,9 +895,11 @@ echo.
 set /p execute="Your choice [1/0]: "
 if "%execute%"=="1" (
     cls
-    python _Module\modul13_groundingdino.py B
-    pause
+    %PYTHON_CMD% _Module\modul13_groundingdino.py B
 )
+echo.
+echo Press any key to continue...
+pause >nul
 goto mode_b_individual
 
 REM ===================================================================
@@ -717,7 +909,7 @@ REM ===================================================================
 :mode_b_module14
 cls
 cd /d "%~dp0"
-python _Module\modul14_yolo.py B --preview
+%PYTHON_CMD% _Module\modul14_yolo.py B --preview
 echo.
 echo ===============================================================================
 echo [1] Execute fixes
@@ -728,10 +920,12 @@ set /p choice="Your choice [1/0]: "
 if "%choice%"=="1" (
     echo.
     echo Executing fixes...
-    python _Module\modul14_yolo.py B
+    %PYTHON_CMD% _Module\modul14_yolo.py B
     echo.
-    pause
 )
+echo.
+echo Press any key to continue...
+pause >nul
 goto mode_b_individual
 
 REM ===================================================================
@@ -741,7 +935,7 @@ REM ===================================================================
 :mode_b_module15
 cls
 cd /d "%~dp0"
-python _Module\modul15_vlm_llm.py B --preview
+%PYTHON_CMD% _Module\modul15_vlm_llm.py B --preview
 echo.
 echo ===============================================================================
 echo [1] Execute fixes
@@ -752,10 +946,12 @@ set /p choice="Your choice [1/0]: "
 if "%choice%"=="1" (
     echo.
     echo Executing fixes...
-    python _Module\modul15_vlm_llm.py B
+    %PYTHON_CMD% _Module\modul15_vlm_llm.py B
     echo.
-    pause
 )
+echo.
+echo Press any key to continue...
+pause >nul
 goto mode_b_individual
 
 
@@ -766,7 +962,12 @@ REM ===================================================================
 :mode_b_all
 cls
 cd /d "%~dp0"
-python _Module\all_modules.py B
+%PYTHON_CMD% _Module\all_modules.py B
+echo.
+echo ===============================================================================
+echo   Batch run complete. Press any key to continue...
+echo ===============================================================================
+pause >nul
 goto mode_b_menu
 
 
@@ -830,7 +1031,7 @@ goto docs
 :settings
 cls
 cd /d "%~dp0"
-python -c "import sys; sys.path.insert(0, '_shared'); from shared_utils import run_settings_menu; run_settings_menu()"
+%PYTHON_CMD% -c "import sys; sys.path.insert(0, '_shared'); from shared_utils import run_settings_menu; run_settings_menu()"
 pause
 goto main_menu
 

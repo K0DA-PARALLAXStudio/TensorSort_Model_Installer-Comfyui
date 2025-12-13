@@ -7,8 +7,6 @@ Processes all 15 module types in one go
 TensorSort Model Installer - Test Version
 """
 
-__version__ = "1.1.0"
-
 import sys
 import os
 from pathlib import Path
@@ -25,9 +23,6 @@ if str(_SHARED_DIR) not in sys.path:
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
-# Import all modules
-# Note: We'll need to refactor modules to export scan/install functions
-# For now, let's create the structure
 
 # ============================================================================
 # ANSI COLORS
@@ -50,7 +45,6 @@ def mode_a_batch():
     """Mode A: Install all file types - PROPER batch processing"""
 
     print("=" * 80)
-    print(f"TENSORSORT MODEL INSTALLER v{__version__}")
     print("BATCH INSTALLATION - ALL FILE TYPES (PREVIEW)")
     print("=" * 80)
     print()
@@ -263,6 +257,10 @@ def mode_a_batch():
                 if 'base_model' in f:
                     print(f"       Detected: {f['base_model']}, {f.get('precision', 'Unknown')}")
                 print(f"       -> {folder_name}/{f['new_name']}")
+                # Special note for Qwen3 (dual-use as LLM)
+                if 'qwen3' in filename.lower() or 'qwen_3' in filename.lower():
+                    print(f"       {Colors.YELLOW}NOTE: This file can also be used as LLM for chat nodes.{Colors.RESET}")
+                    print(f"       {Colors.YELLOW}      To use it there, copy to LLM/ or create a symlink.{Colors.RESET}")
             else:
                 print(f"       -> (installation target)")
 
@@ -346,7 +344,6 @@ def mode_b_batch():
     """Mode B: Check/Fix all file types with 2-pass system"""
 
     print("=" * 80)
-    print(f"TENSORSORT MODEL INSTALLER v{__version__}")
     print("BATCH CHECK/FIX - ALL FILE TYPES (2-Pass System)")
     print("=" * 80)
     print()

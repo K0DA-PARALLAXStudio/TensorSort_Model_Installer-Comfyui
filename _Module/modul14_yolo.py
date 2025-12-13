@@ -302,13 +302,18 @@ def load_yolo_checkpoint(file_path):
             - zip_info: dict mit {'model_type', 'class_names', 'num_classes'} wenn ZIP-Fallback
             - is_zip_fallback: True wenn ZIP-Analyse verwendet wurde
     """
-    import torch
-
     try:
+        import torch
         checkpoint = torch.load(file_path, map_location='cpu', weights_only=False)
         return checkpoint, None, False
+    except ImportError:
+        # torch nicht verfügbar → ZIP-Fallback
+        zip_info = _extract_yolo_info_via_zip(file_path)
+        if zip_info:
+            return None, zip_info, True
+        return None, None, False
     except Exception:
-        # Fallback: ZIP-Analyse für alte Ultralytics-Versionen
+        # torch vorhanden aber Laden fehlgeschlagen → ZIP-Fallback
         zip_info = _extract_yolo_info_via_zip(file_path)
         if zip_info:
             return None, zip_info, True
@@ -798,7 +803,7 @@ def modus_a():
         target_folders="ultralytics/bbox/, ultralytics/segm/"
     )
 
-    all_files = list(DOWNLOADS_DIR.glob("*.pt"))
+    all_files = list(DOWNLOADS_DIR.glob("**/*.pt"))  # recursive
 
     if not all_files:
         print_no_files_found("YOLO files")
@@ -974,15 +979,29 @@ def modus_b(scan_only=False, batch_mode=False, preview_mode=False):
                 filename = file_path.name
                 file_size_mb = file_path.stat().st_size / (1024 * 1024)
 
-                import torch
-                checkpoint = torch.load(file_path, map_location='cpu', weights_only=False)
+                # Load checkpoint with ZIP-fallback for old Ultralytics versions
+                checkpoint, zip_info, is_zip_fallback = load_yolo_checkpoint(file_path)
 
-                version = detect_yolo_version(checkpoint, filename)
-                model_size = detect_model_size(checkpoint, filename, file_size_mb)
-                task = detect_task_type(checkpoint)
-                output_type = get_output_type(task)
-                specialization = detect_specialization(checkpoint, filename)
-                version_suffix = detect_version_suffix(filename)
+                if checkpoint is None and zip_info is None:
+                    print(f"[ERROR] Cannot load YOLO checkpoint {filename}")
+                    continue
+
+                if is_zip_fallback and zip_info:
+                    # ZIP-Fallback: Use extracted info
+                    version = '8'  # Default for old models
+                    model_size = detect_model_size(None, filename, file_size_mb)
+                    output_type = zip_info['model_type']
+                    class_names = zip_info.get('class_names', [])
+                    specialization = _build_zip_specialization(class_names, filename)
+                    version_suffix = detect_version_suffix(filename)
+                else:
+                    # Normal: Use checkpoint
+                    version = detect_yolo_version(checkpoint, filename)
+                    model_size = detect_model_size(checkpoint, filename, file_size_mb)
+                    task = detect_task_type(checkpoint)
+                    output_type = get_output_type(task)
+                    specialization = detect_specialization(checkpoint, filename)
+                    version_suffix = detect_version_suffix(filename)
 
                 target_folder = get_target_folder(output_type)
                 proper_name = generate_proper_name(version, model_size, output_type, specialization, version_suffix)
@@ -1021,7 +1040,7 @@ def modus_b(scan_only=False, batch_mode=False, preview_mode=False):
     all_files = []
     for folder, folder_name in folders_to_scan:
         if folder.exists():
-            all_files += [(f, folder_name) for f in folder.glob("*.pt")]
+            all_files += [(f, folder_name) for f in folder.glob("**/*.pt")]  # recursive
 
     if not all_files:
         print_no_files_found("YOLO files")
@@ -1185,8 +1204,8 @@ def scan_for_batch(downloads_path):
     """
     results = []
 
-    # Finde alle .pt Dateien
-    all_files = list(downloads_path.glob("*.pt"))
+    # Finde alle .pt Dateien (recursive)
+    all_files = list(downloads_path.glob("**/*.pt"))  # recursive
 
     for file_path in all_files:
         # Module Boundary Check

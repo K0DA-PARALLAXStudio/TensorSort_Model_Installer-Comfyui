@@ -272,14 +272,26 @@ def detect_base_model_from_keys(keys):
     key_str = ' '.join(keys)
 
     # ========================================================================
+    # WAN Video LoRAs: diffusion_model.blocks.*.cross_attn (VOR Flux prüfen!)
+    # WAN hat KEINE single_transformer_blocks/double_blocks wie Flux
+    # ========================================================================
+    has_diffusion_blocks = "diffusion_model.blocks" in key_str
+    has_cross_or_self_attn = "self_attn" in key_str or "cross_attn" in key_str
+    has_flux_blocks = 'single_transformer_blocks' in key_str or 'double_blocks' in key_str
+
+    if has_diffusion_blocks and has_cross_or_self_attn and not has_flux_blocks:
+        # WAN LoRA Pattern: diffusion_model.blocks.N.cross_attn ohne Flux-spezifische Blocks
+        return 'WAN'
+
+    # ========================================================================
     # FLUX: single_transformer_blocks, double_blocks
     # ========================================================================
-    if 'single_transformer_blocks' in key_str or 'double_blocks' in key_str:
+    if has_flux_blocks:
         return 'Flux'
 
-    # LoRA: diffusion_model.blocks.*.{self_attn|cross_attn|ffn}
+    # LoRA: diffusion_model.blocks.*.{self_attn|cross_attn|ffn} MIT Flux-Blocks
     # (Flux LoRAs use different key structure than base models)
-    if "diffusion_model.blocks" in key_str and ("self_attn" in key_str or "cross_attn" in key_str or "ffn" in key_str):
+    if has_diffusion_blocks and (has_cross_or_self_attn or "ffn" in key_str) and has_flux_blocks:
         return "Flux"
 
     # ========================================================================
@@ -306,7 +318,8 @@ def detect_base_model_from_keys(keys):
         return 'SD30'  # SD3/SD3.5 share architecture
 
     # ========================================================================
-    # WAN (Video Model): Specific architecture
+    # WAN (Video Model) - Fallback für andere WAN Keys
+    # Primäre WAN LoRA Detection ist oben (diffusion_model.blocks ohne Flux)
     # ========================================================================
     if 'decoder.model' in key_str and 'mmdit' in key_str.lower():
         return 'WAN'
@@ -629,11 +642,20 @@ def detect_category(keys, filename):
 
     # ========================================================================
     # MASSIV ERWEITERTE KEYWORD-LISTEN
-    # Prioritätsreihenfolge: SPEZIFISCH → GENERISCH
-    # WICHTIG: Pose VOR Character (wegen "cowgirl" vs "girl")!
+    # Prioritätsreihenfolge: SPEZIFISCH -> GENERISCH
+    # WICHTIG: Video VOR Pose, Pose VOR Character!
     # ========================================================================
 
     keywords = {
+        # 0. VIDEO - Höchste Priorität (WAN, LTX, AnimateDiff LoRAs)
+        'Video': [
+            'wan', 'wan2', 'wan21', 'wan22', 'wan2.1', 'wan2.2',
+            'i2v', 't2v', 'v2v', 'img2vid', 'txt2vid', 'vid2vid',
+            'video', 'animation', 'animated', 'motion', 'movement',
+            'ltx', 'animatediff', 'animate', 'temporal',
+            'causvid', 'fastmove', 'skyreels'
+        ],
+
         # 1. ANATOMY - Sehr spezifisch (Körperteile + Sex Acts)
         'Anatomy': [
             # Körperteile
@@ -666,8 +688,6 @@ def detect_category(keys, filename):
             'crossed', 'cross-leg', 'legs_spread', 'legs_apart',
             # Dominanz/Submissiv
             'femdom', 'maledom', 'dominant', 'submissive', 'submission',
-            # Video/Animation
-            'i2v', 'wan2', 'animation', 'animated', 'motion', 'movement',
             # Richtungen
             'from_behind', 'from_front', 'from_side', 'from_above', 'from_below',
             'pov', 'first_person'
@@ -1217,7 +1237,7 @@ def analyze_file(file_path):
 
 def scan_for_batch(downloads_path):
     """Scan downloads and return file list (for batch processing)"""
-    all_files = list(downloads_path.glob("*.safetensors"))
+    all_files = list(downloads_path.glob("**/*.safetensors"))  # recursive
 
     results = []
     for file_path in all_files:
@@ -1273,7 +1293,7 @@ def modus_a():
         target_folders="loras/, loras/LyCORIS/"
     )
 
-    all_files = list(DOWNLOADS_DIR.glob("*.safetensors"))
+    all_files = list(DOWNLOADS_DIR.glob("**/*.safetensors"))  # recursive
 
     if not all_files:
         print_no_files_found("LoRA files")
@@ -1474,8 +1494,8 @@ def modus_b(scan_only=False, batch_mode=False, preview_mode=False):
     # ========================================================================
     # SCAN OWN FOLDERS
     # ========================================================================
-    standard_files = list(LORAS_DIR.glob("*.safetensors")) if LORAS_DIR.exists() else []
-    lycoris_files = list(LORAS_LYCORIS_DIR.glob("*.safetensors")) if LORAS_LYCORIS_DIR.exists() else []
+    standard_files = list(LORAS_DIR.glob("**/*.safetensors")) if LORAS_DIR.exists() else []  # recursive
+    lycoris_files = list(LORAS_LYCORIS_DIR.glob("**/*.safetensors")) if LORAS_LYCORIS_DIR.exists() else []  # recursive
     all_files = standard_files + lycoris_files
 
     if not all_files:

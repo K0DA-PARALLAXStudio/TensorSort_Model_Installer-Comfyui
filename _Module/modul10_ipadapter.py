@@ -598,10 +598,10 @@ def modus_a():
         target_folders="ipadapter/, ipadapter-flux/, xlabs/ipadapters/"
     )
 
-    # Finde alle .safetensors und .bin Dateien
+    # Finde alle .safetensors und .bin Dateien (recursive)
     all_files = []
-    all_files += list(DOWNLOADS_DIR.glob("*.safetensors"))
-    all_files += list(DOWNLOADS_DIR.glob("*.bin"))
+    all_files += list(DOWNLOADS_DIR.glob("**/*.safetensors"))  # recursive
+    all_files += list(DOWNLOADS_DIR.glob("**/*.bin"))  # recursive
 
     if not all_files:
         print_no_files_found("IP-Adapter files")
@@ -832,8 +832,8 @@ def modus_b(scan_only=False, batch_mode=False, preview_mode=False):
     all_files = []
     for folder, folder_name in folders_to_scan:
         if folder.exists():
-            all_files += [(f, folder_name) for f in folder.glob("*.safetensors")]
-            all_files += [(f, folder_name) for f in folder.glob("*.bin")]
+            all_files += [(f, folder_name) for f in folder.glob("**/*.safetensors")]  # recursive
+            all_files += [(f, folder_name) for f in folder.glob("**/*.bin")]  # recursive
 
     if not all_files:
         print_no_files_found("IP-Adapter files")
@@ -1008,10 +1008,10 @@ def scan_for_batch(downloads_path):
     """
     results = []
 
-    # Finde alle .safetensors und .bin Dateien
+    # Finde alle .safetensors und .bin Dateien (recursive)
     all_files = []
-    all_files += list(downloads_path.glob("*.safetensors"))
-    all_files += list(downloads_path.glob("*.bin"))
+    all_files += list(downloads_path.glob("**/*.safetensors"))  # recursive
+    all_files += list(downloads_path.glob("**/*.bin"))  # recursive
 
     for file_path in all_files:
         # Module Boundary Check

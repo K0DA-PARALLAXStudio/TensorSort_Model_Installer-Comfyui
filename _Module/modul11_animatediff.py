@@ -34,6 +34,8 @@ from shared_utils import (
     ask_keep_or_delete,
     ask_confirm_installation,
     ask_confirm_fixes,
+    check_alt_file_status,
+    handle_alt_file,
     # Output Helpers (Mode A)
     Colors,
     print_mode_a_header,
@@ -344,10 +346,10 @@ def modus_a():
     )
 
     all_files = []
-    all_files.extend(DOWNLOADS_DIR.glob("*.safetensors"))
-    all_files.extend(DOWNLOADS_DIR.glob("*.ckpt"))
-    all_files.extend(DOWNLOADS_DIR.glob("*.pth"))
-    all_files.extend(DOWNLOADS_DIR.glob("*.pt"))
+    all_files.extend(DOWNLOADS_DIR.glob("**/*.safetensors"))  # recursive
+    all_files.extend(DOWNLOADS_DIR.glob("**/*.ckpt"))  # recursive
+    all_files.extend(DOWNLOADS_DIR.glob("**/*.pth"))  # recursive
+    all_files.extend(DOWNLOADS_DIR.glob("**/*.pt"))  # recursive
 
     if not all_files:
         print_no_files_found("AnimateDiff files")
@@ -605,7 +607,18 @@ def modus_b(scan_only=False, batch_mode=False, preview_mode=False):
         if current_folder != expected_folder:
             problems_list.append(('wrong_folder', filename, size_mb, current_folder.name, expected_folder.name, expected_folder, proper_name, file_path, result))
         elif file_path.name != proper_name:
-            problems_list.append(('wrong_name', filename, size_mb, file_path.parent.name, proper_name, file_path, result))
+            # Check if it's an _alt file (duplicate or variant)
+            alt_status = check_alt_file_status(file_path)
+            if alt_status['has_alt_suffix'] and alt_status['base_exists']:
+                if alt_status['is_duplicate']:
+                    # Duplicate - mark for deletion
+                    problems_list.append(('alt_duplicate', filename, size_mb, file_path.parent.name, alt_status['base_path'].name, file_path, result))
+                else:
+                    # Variant (different hash) - treat as OK, don't try to rename
+                    correct_files.append((file_path.parent.name, filename, size_mb))
+            else:
+                # Normal wrong name
+                problems_list.append(('wrong_name', filename, size_mb, file_path.parent.name, proper_name, file_path, result))
         else:
             correct_files.append((file_path.parent.name, filename, size_mb))
 
@@ -727,10 +740,10 @@ def scan_for_batch(downloads_path):
     """
 
     all_files = []
-    all_files.extend(downloads_path.glob("*.safetensors"))
-    all_files.extend(downloads_path.glob("*.ckpt"))
-    all_files.extend(downloads_path.glob("*.pth"))
-    all_files.extend(downloads_path.glob("*.pt"))
+    all_files.extend(downloads_path.glob("**/*.safetensors"))  # recursive
+    all_files.extend(downloads_path.glob("**/*.ckpt"))  # recursive
+    all_files.extend(downloads_path.glob("**/*.pth"))  # recursive
+    all_files.extend(downloads_path.glob("**/*.pt"))  # recursive
 
     files_to_install = []
 
@@ -780,11 +793,12 @@ def main():
     mode = sys.argv[1].upper()
     scan_only = '--scan-only' in sys.argv
     batch_mode = '--batch' in sys.argv
+    preview_mode = '--preview' in sys.argv
 
     if mode == 'A':
         modus_a()
     elif mode == 'B':
-        modus_b(scan_only=scan_only, batch_mode=batch_mode)
+        modus_b(scan_only=scan_only, batch_mode=batch_mode, preview_mode=preview_mode)
     else:
         print(f"Unknown mode: {mode}")
         print("Use 'A' for Installation or 'B' for Check/Fix")
