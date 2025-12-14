@@ -1,44 +1,38 @@
-TensorSort Model Installer - Free Version
+TensorSort Model Installer – Preview License
 
 Copyright (c) 2025 K0DA Parallax Studio
-All Rights Reserved.
+
+This repository contains a preview / evaluation version of the software.
+The source code is provided for transparency and evaluation purposes.
+This project is intentionally NOT open source.
 
 ================================================================================
-PERMITTED:
+PERMITTED
 ================================================================================
 - Personal, non-commercial use
-- Forking on GitHub for contributions (Pull Requests)
-- Bug reports and feature suggestions via GitHub Issues
-- Learning and education
+- Learning, evaluation, and testing
+- Local modifications for personal use only
 
 ================================================================================
-NOT PERMITTED:
+NOT PERMITTED
 ================================================================================
-- Commercial use (selling, paid services, business use)
-- Redistributing as standalone project (uploading elsewhere)
-- Publishing modified versions elsewhere
-- Claiming this work as your own
-- Including in other projects or products
+- Commercial use of any kind
+- Redistribution of the software or modified versions
+- Publishing forks or derivative works
+- Including the code in other projects, products, or services
+- Offering the software as part of a paid or free service
 
 ================================================================================
-PRO VERSION:
+DISCLAIMER
 ================================================================================
-A full-featured PRO version is available for purchase.
-Contact: kodaparallax@gmail.com
+This software is provided "as is", without warranty of any kind, express or
+implied, including but not limited to the warranties of merchantability,
+fitness for a particular purpose, and noninfringement. In no event shall the
+author be liable for any claim, damages, or other liability arising from the
+use of this software.
 
 ================================================================================
-DISCLAIMER:
-================================================================================
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-================================================================================
-CONTACT:
+CONTACT
 ================================================================================
 Author: K0DA Parallax Studio
 Email: kodaparallax@gmail.com
